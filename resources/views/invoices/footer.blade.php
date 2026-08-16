@@ -1,0 +1,1 @@
+{{-- Footer eliminat intenționat --}}

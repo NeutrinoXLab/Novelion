@@ -7,11 +7,11 @@
     {{-- HERO --}}
     <x-hero />
 
-    {{-- CATEGORII --}}
-    <x-categories />
-
     {{-- PRODUSE RECOMANDATE --}}
     <x-featured-products :featured-products="$featuredProducts" />
+
+    {{-- CATEGORII --}}
+    <x-categories />
 
     {{-- BENEFICII --}}
     <x-benefits />

@@ -1,8 +1,8 @@
 <section class="bg-gradient-to-b from-slate-50 to-white">
 
-    <div class="max-w-7xl mx-auto px-6 pt-6 pb-16">
+    <div class="max-w-7xl mx-auto px-6 pt-10 pb-16">
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center">
 
             {{-- Text --}}
             <div>
@@ -12,7 +12,7 @@
                     ⭐ Calitate verificată
                 </span>
 
-                <h1 class="text-5xl lg:text-6xl font-extrabold leading-tight text-slate-900">
+                <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight text-slate-900">
                     Produse atent selectate pentru
                     <span class="text-cyan-500">
                         casa și familia ta
@@ -33,10 +33,10 @@
                     </a>
 
                     <a
-    href="{{ route('products.new') }}"
-    class="border border-slate-300 hover:bg-slate-100 px-8 py-4 rounded-xl font-semibold transition duration-300">
-    Vezi noutățile
-</a>
+                        href="{{ route('products.new') }}"
+                        class="border border-slate-300 hover:bg-slate-100 px-8 py-4 rounded-xl font-semibold transition duration-300">
+                        Vezi noutățile
+                    </a>
 
                 </div>
 
@@ -49,8 +49,8 @@
 
                     <img
                         src="{{ asset('images/hero/hero.png') }}"
-                        alt="Novelion Hero"
-                        class="block w-full h-auto">
+                        alt="Novelion - produse pentru casa și familie"
+                        class="block w-full h-auto object-contain">
 
                 </div>
 

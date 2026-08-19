@@ -7,7 +7,7 @@
         </h2>
 
         <p class="mt-4 text-cyan-100">
-            Primește primul informații despre produse noi, promoții și oferte exclusive.
+            Fii primul care află despre produse noi, promoții și oferte exclusive.
         </p>
 
         <form class="mt-8 flex flex-col sm:flex-row gap-4 justify-center">

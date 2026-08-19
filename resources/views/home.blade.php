@@ -1,19 +1,22 @@
 @extends('layouts.app')
 
-@section('title', 'Acasă')
+@section('title', 'Novelion - Produse pentru casa și familia ta')
 
 @section('content')
 
-<x-hero />
+    {{-- HERO --}}
+    <x-hero />
 
-<x-featured-products :featured-products="$featuredProducts" />
+    {{-- CATEGORII --}}
+    <x-categories />
 
-<x-categories :categories="$categories" />
+    {{-- PRODUSE RECOMANDATE --}}
+    <x-featured-products :featured-products="$featuredProducts" />
 
-<x-new-products />
+    {{-- BENEFICII --}}
+    <x-benefits />
 
-<x-benefits />
-
-<x-newsletter />
+    {{-- NEWSLETTER --}}
+    <x-newsletter />
 
 @endsection

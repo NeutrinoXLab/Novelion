@@ -10,6 +10,7 @@
 
     <div class="max-w-7xl mx-auto px-6">
 
+        {{-- TITLU --}}
         <div class="text-center mb-10">
 
             <h2 class="text-3xl font-bold text-slate-900">
@@ -22,27 +23,33 @@
 
         </div>
 
+
+        {{-- CATEGORII --}}
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
 
             @forelse($categories as $category)
 
                 <a
                     href="{{ route('categories.show', $category) }}"
-                    class="group flex flex-col h-full bg-slate-50 hover:bg-cyan-50 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg hover:-translate-y-1 transition duration-300">
+                    class="group flex flex-col bg-slate-50 hover:bg-cyan-50 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg hover:-translate-y-1 transition duration-300"
+                >
 
-                    {{-- Imagine categorie --}}
-                    <div class="aspect-square overflow-hidden bg-white flex items-center justify-center">
+                    {{-- ZONA FIXĂ A IMAGINII --}}
+                    <div
+                        class="h-[230px] w-full flex items-center justify-center bg-slate-100 overflow-hidden shrink-0 p-3"
+                    >
 
                         @if($category->image_path)
 
                             <img
                                 src="{{ asset('storage/' . $category->image_path) }}"
                                 alt="{{ $category->name }}"
-                                class="w-full h-full object-contain p-3 group-hover:scale-105 transition duration-500">
+                                class="max-w-full max-h-full w-auto h-auto object-contain group-hover:scale-105 transition duration-500"
+                            >
 
                         @else
 
-                            <div class="w-full h-full flex items-center justify-center text-5xl">
+                            <div class="text-5xl">
                                 📦
                             </div>
 
@@ -50,10 +57,13 @@
 
                     </div>
 
-                    {{-- Nume categorie --}}
-                    <div class="p-4 text-center flex items-center justify-center min-h-[72px]">
 
-                        <h3 class="font-semibold text-slate-800 group-hover:text-cyan-600 transition">
+                    {{-- ZONA FIXĂ A NUMELUI --}}
+                    <div
+                        class="h-[64px] flex items-center justify-center px-3 text-center bg-white shrink-0"
+                    >
+
+                        <h3 class="font-semibold text-slate-800 group-hover:text-cyan-600 transition leading-tight">
                             {{ $category->name }}
                         </h3>
 
@@ -63,7 +73,7 @@
 
             @empty
 
-                <div class="col-span-6 text-center text-gray-500">
+                <div class="col-span-6 text-center text-gray-500 py-10">
                     Nu există categorii.
                 </div>
 

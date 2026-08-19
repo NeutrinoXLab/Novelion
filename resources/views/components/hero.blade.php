@@ -33,10 +33,10 @@
                     </a>
 
                     <a
-                        href="#new-products"
-                        class="border border-slate-300 hover:bg-slate-100 px-8 py-4 rounded-xl font-semibold transition duration-300">
-                        Vezi noutățile
-                    </a>
+    href="{{ route('products.new') }}"
+    class="border border-slate-300 hover:bg-slate-100 px-8 py-4 rounded-xl font-semibold transition duration-300">
+    Vezi noutățile
+</a>
 
                 </div>
 

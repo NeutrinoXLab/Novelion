@@ -2,7 +2,8 @@
 
     <div class="max-w-7xl mx-auto px-6">
 
-        <div class="flex justify-between items-center mb-10">
+        {{-- Header secțiune --}}
+        <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-10">
 
             <div>
 
@@ -16,23 +17,33 @@
 
             </div>
 
-            <a href="{{ route('products.index') }}"
-               class="text-cyan-600 font-semibold hover:underline">
+            <a
+                href="{{ route('products.index') }}"
+                class="shrink-0 text-cyan-600 font-semibold hover:text-cyan-700 hover:underline transition"
+            >
                 Vezi toate →
             </a>
 
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+
+        {{-- Produse --}}
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 items-stretch">
 
             @forelse($featuredProducts as $product)
 
-                <x-product-card :product="$product" />
+                <div class="h-full">
+
+                    <x-product-card :product="$product" />
+
+                </div>
 
             @empty
 
-                <div class="col-span-4 text-center py-16 text-gray-500">
+                <div class="col-span-full text-center py-16 text-gray-500">
+
                     Nu există produse.
+
                 </div>
 
             @endforelse

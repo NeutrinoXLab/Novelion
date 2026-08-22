@@ -23,10 +23,10 @@
 
                         <div class="bg-white rounded-3xl shadow-sm p-6">
 
-                            <div class="flex gap-6 items-center">
+                            <div class="flex flex-col sm:flex-row gap-6 sm:items-center">
 
                                 {{-- Imagine --}}
-                                <div class="w-28 h-28 rounded-2xl overflow-hidden bg-slate-100 flex-shrink-0">
+                                <div class="w-32 h-32 sm:w-28 sm:h-28 rounded-2xl overflow-hidden bg-slate-100 flex-shrink-0 mx-auto sm:mx-0">
 
                                     @if($item['product']->primary_image_path)
 

@@ -22,10 +22,22 @@ class OrdersTable
 
             ->columns([
 
+                /*
+                |--------------------------------------------------------------------------
+                | COMANDĂ
+                |--------------------------------------------------------------------------
+                */
+
                 TextColumn::make('order_number')
                     ->label('Comandă')
                     ->searchable()
                     ->sortable(),
+
+                /*
+                |--------------------------------------------------------------------------
+                | CLIENT
+                |--------------------------------------------------------------------------
+                */
 
                 TextColumn::make('first_name')
                     ->label('Client')
@@ -36,35 +48,52 @@ class OrdersTable
                     ->searchable(),
 
                 TextColumn::make('email')
+                    ->label('Email')
                     ->searchable(),
 
                 TextColumn::make('phone')
                     ->label('Telefon'),
+
+                /*
+                |--------------------------------------------------------------------------
+                | TOTAL
+                |--------------------------------------------------------------------------
+                */
 
                 TextColumn::make('total')
                     ->label('Total')
                     ->money('RON')
                     ->sortable(),
 
+                /*
+                |--------------------------------------------------------------------------
+                | STATUS COMANDĂ
+                |--------------------------------------------------------------------------
+                */
+
                 BadgeColumn::make('status')
                     ->label('Status')
                     ->colors([
-                        'primary' => 'new',
-                        'success' => 'confirmed',
-                        'warning' => 'processing',
-                        'info' => 'shipped',
-                        'gray' => 'delivered',
+                        'warning' => 'pending',
+                        'info' => 'processing',
+                        'primary' => 'shipped',
+                        'success' => 'delivered',
                         'danger' => 'cancelled',
                     ])
                     ->formatStateUsing(fn ($state) => match ($state) {
-                        'new' => 'Nouă',
-                        'confirmed' => 'Confirmată',
-                        'processing' => 'În pregătire',
+                        'pending' => 'În așteptare',
+                        'processing' => 'În procesare',
                         'shipped' => 'Expediată',
                         'delivered' => 'Livrată',
                         'cancelled' => 'Anulată',
                         default => $state,
                     }),
+
+                /*
+                |--------------------------------------------------------------------------
+                | DATA
+                |--------------------------------------------------------------------------
+                */
 
                 TextColumn::make('created_at')
                     ->label('Data')
@@ -79,13 +108,28 @@ class OrdersTable
 
             ->recordActions([
 
+                /*
+                |--------------------------------------------------------------------------
+                | VIZUALIZARE
+                |--------------------------------------------------------------------------
+                */
+
                 ViewAction::make(),
+
+                /*
+                |--------------------------------------------------------------------------
+                | EDITARE
+                |--------------------------------------------------------------------------
+                */
 
                 EditAction::make(),
 
                 /*
-                 * WhatsApp
-                 */
+                |--------------------------------------------------------------------------
+                | WHATSAPP
+                |--------------------------------------------------------------------------
+                */
+
                 Action::make('whatsapp')
                     ->label('WhatsApp')
                     ->icon('heroicon-o-chat-bubble-left-right')
@@ -93,8 +137,11 @@ class OrdersTable
                     ->url(function ($record) {
 
                         /*
-                         * Curățăm numărul de telefon.
-                         */
+                        |--------------------------------------------------------------------------
+                        | Curățăm numărul de telefon
+                        |--------------------------------------------------------------------------
+                        */
+
                         $phone = preg_replace(
                             '/\D/',
                             '',
@@ -102,24 +149,30 @@ class OrdersTable
                         );
 
                         /*
-                         * Dacă numărul începe cu 0,
-                         * îl transformăm în format internațional România.
-                         *
-                         * Exemplu:
-                         * 0750444672
-                         * devine:
-                         * 40750444672
-                         */
+                        |--------------------------------------------------------------------------
+                        | Format internațional România
+                        |--------------------------------------------------------------------------
+                        |
+                        | Exemplu:
+                        |
+                        | 0722222222
+                        |
+                        | devine:
+                        |
+                        | 4072222222
+                        |--------------------------------------------------------------------------
+                        */
+
                         if (str_starts_with($phone, '0')) {
                             $phone = '40' . substr($phone, 1);
                         }
 
                         /*
-                         * Mesajul WhatsApp.
-                         *
-                         * Afișăm doar totalul final.
-                         * Transportul nu este afișat separat.
-                         */
+                        |--------------------------------------------------------------------------
+                        | Mesaj WhatsApp
+                        |--------------------------------------------------------------------------
+                        */
+
                         $message =
                             "Bună ziua, "
                             . $record->first_name
@@ -161,8 +214,11 @@ class OrdersTable
                     ->openUrlInNewTab(),
 
                 /*
-                 * Factură
-                 */
+                |--------------------------------------------------------------------------
+                | FACTURĂ
+                |--------------------------------------------------------------------------
+                */
+
                 Action::make('invoice')
                     ->label('Factură')
                     ->icon('heroicon-o-document-arrow-down')

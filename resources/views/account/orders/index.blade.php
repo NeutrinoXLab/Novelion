@@ -6,17 +6,28 @@
 
 <section class="bg-slate-100 py-16 min-h-screen">
 
-    <div class="max-w-7xl mx-auto px-6">
+```
+<div class="max-w-7xl mx-auto px-6">
 
-        <h1 class="text-5xl font-bold text-slate-900 mb-12">
+    <div class="mb-12">
+
+        <h1 class="text-5xl font-bold text-slate-900">
             Comenzile mele
         </h1>
 
-        @if($orders->count())
+        <p class="text-slate-500 mt-3">
+            Aici poți vedea comenzile tale și statusul acestora.
+        </p>
 
-            <div class="bg-white rounded-3xl shadow-sm overflow-hidden">
+    </div>
 
-                <table class="w-full">
+    @if($orders->count())
+
+        <div class="bg-white rounded-3xl shadow-sm overflow-hidden">
+
+            <div class="overflow-x-auto">
+
+                <table class="w-full min-w-[700px]">
 
                     <thead class="bg-slate-50">
 
@@ -49,61 +60,72 @@
 
                         @foreach($orders as $order)
 
-                            <tr class="border-t">
+                            @php
 
-                                <td class="px-6 py-5 font-semibold">
+                                $statuses = [
+
+                                    'pending' => [
+                                        'label' => 'În așteptare',
+                                        'class' => 'bg-yellow-100 text-yellow-700',
+                                    ],
+
+                                    'processing' => [
+                                        'label' => 'În procesare',
+                                        'class' => 'bg-blue-100 text-blue-700',
+                                    ],
+
+                                    'shipped' => [
+                                        'label' => 'Expediată',
+                                        'class' => 'bg-purple-100 text-purple-700',
+                                    ],
+
+                                    'delivered' => [
+                                        'label' => 'Livrată',
+                                        'class' => 'bg-emerald-100 text-emerald-700',
+                                    ],
+
+                                    'cancelled' => [
+                                        'label' => 'Anulată',
+                                        'class' => 'bg-red-100 text-red-700',
+                                    ],
+
+                                ];
+
+                                $currentStatus = $statuses[$order->status] ?? [
+                                    'label' => $order->status,
+                                    'class' => 'bg-gray-100 text-gray-700',
+                                ];
+
+                            @endphp
+
+                            <tr class="border-t hover:bg-slate-50 transition">
+
+                                <td class="px-6 py-5 font-semibold text-slate-900">
+
                                     {{ $order->order_number }}
+
                                 </td>
 
-                                <td class="px-6 py-5">
+                                <td class="px-6 py-5 text-slate-600">
+
                                     {{ $order->created_at->format('d.m.Y H:i') }}
+
                                 </td>
 
                                 <td class="px-6 py-5">
 
-                                    @php
-    $status = [
-        'new' => [
-            'label' => 'Nouă',
-            'class' => 'bg-blue-100 text-blue-700',
-        ],
-        'confirmed' => [
-            'label' => 'Confirmată',
-            'class' => 'bg-green-100 text-green-700',
-        ],
-        'processing' => [
-            'label' => 'În pregătire',
-            'class' => 'bg-yellow-100 text-yellow-700',
-        ],
-        'shipped' => [
-            'label' => 'Expediată',
-            'class' => 'bg-purple-100 text-purple-700',
-        ],
-        'delivered' => [
-            'label' => 'Livrată',
-            'class' => 'bg-emerald-100 text-emerald-700',
-        ],
-        'cancelled' => [
-            'label' => 'Anulată',
-            'class' => 'bg-red-100 text-red-700',
-        ],
-    ];
+                                    <span
+                                        class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold {{ $currentStatus['class'] }}">
 
-    $current = $status[$order->status] ?? [
-        'label' => $order->status,
-        'class' => 'bg-gray-100 text-gray-700',
-    ];
-@endphp
+                                        {{ $currentStatus['label'] }}
 
-<span class="px-3 py-1 rounded-full text-sm font-semibold {{ $current['class'] }}">
-    {{ $current['label'] }}
-</span>
+                                    </span>
 
                                 </td>
 
-                                <td class="px-6 py-5 text-right font-bold">
+                                <td class="px-6 py-5 text-right font-bold text-slate-900">
 
-                                    {{ number_format($order->total,2,',','.') }} Lei
+                                    {{ number_format($order->total, 2, ',', '.') }} Lei
 
                                 </td>
 
@@ -111,9 +133,9 @@
 
                                     <a
                                         href="{{ route('my-orders.show', $order) }}"
-                                        class="text-cyan-600 hover:underline">
+                                        class="inline-block bg-cyan-500 hover:bg-cyan-600 text-white px-5 py-2 rounded-xl font-semibold transition">
 
-                                        Vezi
+                                        Vezi comanda
 
                                     </a>
 
@@ -129,41 +151,44 @@
 
             </div>
 
-            <div class="mt-8">
+        </div>
 
-                {{ $orders->links() }}
+        <div class="mt-8">
 
+            {{ $orders->links() }}
+
+        </div>
+
+    @else
+
+        <div class="bg-white rounded-3xl shadow-sm p-20 text-center">
+
+            <div class="text-7xl mb-6">
+                📦
             </div>
 
-        @else
+            <h2 class="text-3xl font-bold mb-4">
+                Nu ai încă nicio comandă.
+            </h2>
 
-            <div class="bg-white rounded-3xl shadow-sm p-20 text-center">
+            <p class="text-slate-500">
+                Comenzile tale vor apărea aici după ce finalizezi o comandă.
+            </p>
 
-                <div class="text-7xl mb-6">
+            <a
+                href="{{ route('home') }}"
+                class="inline-block mt-8 bg-cyan-500 hover:bg-cyan-600 text-white px-8 py-4 rounded-2xl font-bold transition">
 
-                    📦
+                Începe cumpărăturile
 
-                </div>
+            </a>
 
-                <h2 class="text-3xl font-bold mb-4">
+        </div>
 
-                    Nu ai încă nicio comandă.
+    @endif
 
-                </h2>
-
-                <a
-                    href="{{ route('home') }}"
-                    class="inline-block mt-6 bg-cyan-500 hover:bg-cyan-600 text-white px-8 py-4 rounded-2xl font-bold">
-
-                    Începe cumpărăturile
-
-                </a>
-
-            </div>
-
-        @endif
-
-    </div>
+</div>
+```
 
 </section>
 

@@ -138,13 +138,10 @@ class OrderService
                 |--------------------------------------------------------------------------
                 */
 
-                // Doar produsele
                 'subtotal' => $subtotal,
 
-                // Transportul calculat automat
                 'shipping_cost' => $shippingCost,
 
-                // Produse + transport
                 'total' => $total,
 
                 /*
@@ -249,8 +246,27 @@ class OrderService
     {
         DB::transaction(function () use ($order) {
 
+            /*
+             * Luăm statusul real din baza de date.
+             *
+             * Este important deoarece această metodă este apelată
+             * înainte ca Filament să salveze noul status.
+             */
+            $currentStatus = $order->getRawOriginal('status');
+
+            /*
+             * Dacă această comandă este deja anulată,
+             * nu mai refacem stocul.
+             */
+            if ($currentStatus === 'cancelled') {
+                return;
+            }
+
             $order->load('items.product');
 
+            /*
+             * Refacem stocul.
+             */
             foreach ($order->items as $item) {
 
                 if (! $item->product) {
@@ -263,9 +279,26 @@ class OrderService
                 );
             }
 
+            /*
+             * Păstrăm statusul plății dacă plata Stripe
+             * a fost deja efectuată.
+             */
+            $paymentStatus = $order->payment_status;
+
+            /*
+             * Pentru ramburs, dacă plata nu a fost făcută,
+             * anularea marchează plata ca eșuată.
+             */
+            if (
+                $order->payment_method === 'cash' &&
+                $order->payment_status === 'pending'
+            ) {
+                $paymentStatus = 'failed';
+            }
+
             $order->update([
                 'status' => 'cancelled',
-                'payment_status' => 'failed',
+                'payment_status' => $paymentStatus,
             ]);
         });
     }

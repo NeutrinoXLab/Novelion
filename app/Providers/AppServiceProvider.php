@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -19,6 +20,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        if (request()->header('X-Forwarded-Proto') === 'https') {
+            URL::forceScheme('https');
+        }
+
+        if (request()->header('X-Forwarded-Host')) {
+            URL::forceRootUrl(
+                'https://' . request()->header('X-Forwarded-Host')
+            );
+        }
     }
 }

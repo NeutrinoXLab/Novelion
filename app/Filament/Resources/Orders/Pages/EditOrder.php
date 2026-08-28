@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Orders\Pages;
 
 use App\Filament\Resources\Orders\OrderResource;
+use App\Services\OrderService;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ViewAction;
 use Filament\Resources\Pages\EditRecord;
@@ -17,5 +18,19 @@ class EditOrder extends EditRecord
             ViewAction::make(),
             DeleteAction::make(),
         ];
+    }
+
+    protected function beforeSave(): void
+    {
+        /*
+         * Dacă administratorul schimbă statusul în "cancelled",
+         * refacem stocul înainte ca Filament să salveze noul status.
+         */
+        if (
+            $this->record->status !== 'cancelled' &&
+            $this->data['status'] === 'cancelled'
+        ) {
+            app(OrderService::class)->cancel($this->record);
+        }
     }
 }

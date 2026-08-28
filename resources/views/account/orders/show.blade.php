@@ -6,210 +6,433 @@
 
 <section class="bg-slate-100 py-16 min-h-screen">
 
-    <div class="max-w-6xl mx-auto px-6">
+```
+<div class="max-w-6xl mx-auto px-6">
 
-        <div class="flex justify-between items-center mb-10">
+    {{-- HEADER --}}
+    <div class="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-6 mb-10">
 
-            <div>
+        <div>
 
-                <h1 class="text-5xl font-bold">
+            <h1 class="text-4xl lg:text-5xl font-bold text-slate-900">
+                Comanda {{ $order->order_number }}
+            </h1>
 
-                    Comanda {{ $order->order_number }}
-
-                </h1>
-
-                <p class="text-slate-500 mt-2">
-
-                    Plasată la {{ $order->created_at->format('d.m.Y H:i') }}
-
-                </p>
-
-            </div>
-
-            <a
-                href="{{ route('my-orders.index') }}"
-                class="bg-white border px-6 py-3 rounded-xl hover:bg-slate-50">
-
-                ← Înapoi
-
-            </a>
+            <p class="text-slate-500 mt-2">
+                Plasată la {{ $order->created_at->format('d.m.Y H:i') }}
+            </p>
 
         </div>
 
-        <div class="grid lg:grid-cols-3 gap-8">
+        <a
+            href="{{ route('my-orders.index') }}"
+            class="inline-block bg-white border border-slate-200 px-6 py-3 rounded-xl hover:bg-slate-50 transition text-center">
 
-            <div class="lg:col-span-2">
+            ← Înapoi la comenzile mele
 
-                <div class="bg-white rounded-3xl shadow-sm p-8">
+        </a>
 
-                    <h2 class="text-2xl font-bold mb-8">
+    </div>
 
-                        Produse comandate
 
-                    </h2>
+    {{-- STATUS COMANDĂ --}}
+    @php
 
-                    <div class="space-y-6">
+        $statuses = [
 
-                        @foreach($order->items as $item)
+            'pending' => [
+                'label' => 'În așteptare',
+                'class' => 'bg-yellow-100 text-yellow-700',
+            ],
 
-                            <div class="flex justify-between border-b pb-5">
+            'processing' => [
+                'label' => 'În procesare',
+                'class' => 'bg-blue-100 text-blue-700',
+            ],
 
-                                <div>
+            'shipped' => [
+                'label' => 'Expediată',
+                'class' => 'bg-purple-100 text-purple-700',
+            ],
 
-                                    <div class="font-semibold text-lg">
+            'delivered' => [
+                'label' => 'Livrată',
+                'class' => 'bg-emerald-100 text-emerald-700',
+            ],
 
-                                        {{ $item->product_name }}
+            'cancelled' => [
+                'label' => 'Anulată',
+                'class' => 'bg-red-100 text-red-700',
+            ],
 
-                                    </div>
+        ];
 
-                                    <div class="text-slate-500">
+        $currentStatus = $statuses[$order->status] ?? [
+            'label' => $order->status,
+            'class' => 'bg-gray-100 text-gray-700',
+        ];
 
-                                        Cantitate:
-                                        {{ $item->quantity }}
 
-                                    </div>
+        $paymentStatuses = [
 
+            'pending' => [
+                'label' => 'În așteptare',
+                'class' => 'bg-yellow-100 text-yellow-700',
+            ],
+
+            'paid' => [
+                'label' => 'Plătită',
+                'class' => 'bg-green-100 text-green-700',
+            ],
+
+            'failed' => [
+                'label' => 'Eșuată',
+                'class' => 'bg-red-100 text-red-700',
+            ],
+
+            'refunded' => [
+                'label' => 'Rambursată',
+                'class' => 'bg-purple-100 text-purple-700',
+            ],
+
+        ];
+
+        $currentPaymentStatus = $paymentStatuses[$order->payment_status] ?? [
+            'label' => $order->payment_status,
+            'class' => 'bg-gray-100 text-gray-700',
+        ];
+
+    @endphp
+
+
+    <div class="grid lg:grid-cols-3 gap-8">
+
+
+        {{-- COLOANA PRINCIPALĂ --}}
+        <div class="lg:col-span-2 space-y-8">
+
+
+            {{-- PRODUSE --}}
+            <div class="bg-white rounded-3xl shadow-sm p-6 lg:p-8">
+
+                <h2 class="text-2xl font-bold text-slate-900 mb-8">
+                    Produse comandate
+                </h2>
+
+                <div class="space-y-6">
+
+                    @foreach($order->items as $item)
+
+                        <div class="flex flex-col sm:flex-row sm:justify-between gap-4 border-b border-slate-200 pb-5 last:border-b-0 last:pb-0">
+
+                            <div>
+
+                                <div class="font-semibold text-lg text-slate-900">
+                                    {{ $item->product_name }}
                                 </div>
 
-                                <div class="font-bold text-cyan-600">
+                                <div class="text-slate-500 mt-1">
+                                    Cantitate: {{ $item->quantity }}
+                                </div>
 
-                                    {{ number_format($item->total,2,',','.') }} Lei
-
+                                <div class="text-sm text-slate-400 mt-1">
+                                    Preț unitar:
+                                    {{ number_format($item->price, 2, ',', '.') }} Lei
                                 </div>
 
                             </div>
 
-                        @endforeach
+                            <div class="font-bold text-cyan-600 text-lg sm:text-right">
 
-                    </div>
+                                {{ number_format($item->total, 2, ',', '.') }} Lei
+
+                            </div>
+
+                        </div>
+
+                    @endforeach
 
                 </div>
 
             </div>
 
-            <div>
 
-                <div class="bg-white rounded-3xl shadow-sm p-8">
+            {{-- ADRESA LIVRARE --}}
+            <div class="bg-white rounded-3xl shadow-sm p-6 lg:p-8">
 
-                    <h2 class="text-2xl font-bold mb-6">
+                <h2 class="text-2xl font-bold text-slate-900 mb-6">
+                    Adresa de livrare
+                </h2>
 
-                        Rezumat
+                <div class="space-y-1 text-slate-700">
 
-                    </h2>
-
-                    <div class="space-y-4">
-
-                        <div class="flex justify-between">
-
-                            <span>Status</span>
-
-                            <span class="font-semibold">
-
-                                {{ ucfirst($order->status) }}
-
-                            </span>
-
-                        </div>
-
-                        <div class="flex justify-between">
-
-                            <span>Plată</span>
-
-                            <span>
-
-                                {{ ucfirst($order->payment_status) }}
-
-                            </span>
-
-                        </div>
-
-                        <div class="flex justify-between">
-
-                            <span>Livrare</span>
-
-                            <span>
-
-                                {{ number_format($order->shipping_cost,2,',','.') }} Lei
-
-                            </span>
-
-                        </div>
-
-                        <hr>
-
-                        <div class="flex justify-between text-2xl font-bold">
-
-                            <span>Total</span>
-
-                            <span class="text-cyan-600">
-
-                                {{ number_format($order->total,2,',','.') }} Lei
-
-                            </span>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-                <div class="bg-white rounded-3xl shadow-sm p-8 mt-8">
-
-                    <h2 class="text-2xl font-bold mb-6">
-
-                        Adresa de livrare
-
-                    </h2>
-
-                    <p>
-
-                        {{ $order->first_name }}
-                        {{ $order->last_name }}
-
+                    <p class="font-semibold">
+                        {{ $order->shipping_first_name ?: $order->first_name }}
+                        {{ $order->shipping_last_name ?: $order->last_name }}
                     </p>
 
                     <p>
-
-                        {{ $order->address }}
-
+                        {{ $order->shipping_address ?: $order->address }}
                     </p>
 
                     <p>
-
-                        {{ $order->city }},
-                        {{ $order->county }}
-
+                        {{ $order->shipping_city ?: $order->city }},
+                        {{ $order->shipping_county ?: $order->county }}
                     </p>
 
-                    @if($order->postal_code)
+                    @if($order->shipping_postal_code ?: $order->postal_code)
 
                         <p>
-
-                            {{ $order->postal_code }}
-
+                            {{ $order->shipping_postal_code ?: $order->postal_code }}
                         </p>
 
                     @endif
 
                     <p class="mt-4">
-
-                        {{ $order->phone }}
-
-                    </p>
-
-                    <p>
-
-                        {{ $order->email }}
-
+                        {{ $order->shipping_phone ?: $order->phone }}
                     </p>
 
                 </div>
 
             </div>
 
+
+            {{-- OBSERVAȚII --}}
+            @if($order->notes)
+
+                <div class="bg-white rounded-3xl shadow-sm p-6 lg:p-8">
+
+                    <h2 class="text-2xl font-bold text-slate-900 mb-4">
+                        Observații
+                    </h2>
+
+                    <p class="text-slate-600 whitespace-pre-line">
+                        {{ $order->notes }}
+                    </p>
+
+                </div>
+
+            @endif
+
+        </div>
+
+
+        {{-- COLOANA LATERALĂ --}}
+        <div class="space-y-8">
+
+
+            {{-- STATUS --}}
+            <div class="bg-white rounded-3xl shadow-sm p-6 lg:p-8">
+
+                <h2 class="text-2xl font-bold text-slate-900 mb-6">
+                    Status comandă
+                </h2>
+
+                <span
+                    class="inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold {{ $currentStatus['class'] }}">
+
+                    {{ $currentStatus['label'] }}
+
+                </span>
+
+            </div>
+
+
+            {{-- PLATĂ --}}
+            <div class="bg-white rounded-3xl shadow-sm p-6 lg:p-8">
+
+                <h2 class="text-2xl font-bold text-slate-900 mb-6">
+                    Plată
+                </h2>
+
+                <div class="space-y-4">
+
+                    <div class="flex justify-between gap-4">
+
+                        <span class="text-slate-500">
+                            Metodă
+                        </span>
+
+                        <span class="font-semibold text-right">
+
+                            {{ $order->payment_method === 'cash'
+                                ? 'Ramburs'
+                                : 'Card bancar'
+                            }}
+
+                        </span>
+
+                    </div>
+
+                    <div class="flex justify-between gap-4">
+
+                        <span class="text-slate-500">
+                            Status
+                        </span>
+
+                        <span
+                            class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold {{ $currentPaymentStatus['class'] }}">
+
+                            {{ $currentPaymentStatus['label'] }}
+
+                        </span>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            {{-- REZUMAT --}}
+            <div class="bg-white rounded-3xl shadow-sm p-6 lg:p-8">
+
+                <h2 class="text-2xl font-bold text-slate-900 mb-6">
+                    Rezumat comandă
+                </h2>
+
+                <div class="space-y-4">
+
+                    <div class="flex justify-between gap-4">
+
+                        <span class="text-slate-500">
+                            Subtotal
+                        </span>
+
+                        <span class="font-semibold">
+                            {{ number_format($order->subtotal, 2, ',', '.') }} Lei
+                        </span>
+
+                    </div>
+
+                    <div class="flex justify-between gap-4">
+
+                        <span class="text-slate-500">
+                            Transport
+                        </span>
+
+                        <span class="font-semibold">
+
+                            @if($order->shipping_cost > 0)
+
+                                {{ number_format($order->shipping_cost, 2, ',', '.') }} Lei
+
+                            @else
+
+                                Gratuit
+
+                            @endif
+
+                        </span>
+
+                    </div>
+
+                    <hr>
+
+                    <div class="flex justify-between gap-4 items-center">
+
+                        <span class="text-xl font-bold">
+                            Total
+                        </span>
+
+                        <span class="text-2xl font-bold text-cyan-600 text-right">
+
+                            {{ number_format($order->total, 2, ',', '.') }} Lei
+
+                        </span>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            {{-- LIVRARE --}}
+            @if($order->courier || $order->awb_number || $order->tracking_url || $order->shipped_at)
+
+                <div class="bg-white rounded-3xl shadow-sm p-6 lg:p-8">
+
+                    <h2 class="text-2xl font-bold text-slate-900 mb-6">
+                        Livrare
+                    </h2>
+
+                    <div class="space-y-4">
+
+                        @if($order->courier)
+
+                            <div class="flex justify-between gap-4">
+
+                                <span class="text-slate-500">
+                                    Curier
+                                </span>
+
+                                <span class="font-semibold text-right">
+                                    {{ $order->courier }}
+                                </span>
+
+                            </div>
+
+                        @endif
+
+                        @if($order->awb_number)
+
+                            <div class="flex justify-between gap-4">
+
+                                <span class="text-slate-500">
+                                    AWB
+                                </span>
+
+                                <span class="font-semibold text-right">
+                                    {{ $order->awb_number }}
+                                </span>
+
+                            </div>
+
+                        @endif
+
+                        @if($order->tracking_url)
+
+                            <div>
+
+                                <a
+                                    href="{{ $order->tracking_url }}"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="block w-full bg-cyan-500 hover:bg-cyan-600 text-white py-3 rounded-xl font-semibold text-center transition">
+
+                                    Urmărește coletul
+
+                                </a>
+
+                            </div>
+
+                        @endif
+
+                        @if($order->shipped_at)
+
+                            <div class="text-sm text-slate-500">
+
+                                Expediată la:
+                                {{ $order->shipped_at->format('d.m.Y H:i') }}
+
+                            </div>
+
+                        @endif
+
+                    </div>
+
+                </div>
+
+            @endif
+
+
         </div>
 
     </div>
+
+</div>
+```
 
 </section>
 

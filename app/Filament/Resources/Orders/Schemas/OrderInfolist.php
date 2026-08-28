@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\Orders\Schemas;
 
-use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Components\RepeatableEntry;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Schema;
 
 class OrderInfolist
@@ -12,12 +12,6 @@ class OrderInfolist
     {
         return $schema
             ->components([
-
-                /*
-                |--------------------------------------------------------------------------
-                | COMANDĂ
-                |--------------------------------------------------------------------------
-                */
 
                 TextEntry::make('order_number')
                     ->label('Număr comandă'),
@@ -28,12 +22,6 @@ class OrderInfolist
                         'company' => 'Persoană juridică',
                         default => 'Persoană fizică',
                     }),
-
-                /*
-                |--------------------------------------------------------------------------
-                | DATE FACTURARE
-                |--------------------------------------------------------------------------
-                */
 
                 TextEntry::make('first_name')
                     ->label('Prenume'),
@@ -60,12 +48,6 @@ class OrderInfolist
                     ->label('Cod poștal')
                     ->placeholder('-'),
 
-                /*
-                |--------------------------------------------------------------------------
-                | DATE FIRMĂ
-                |--------------------------------------------------------------------------
-                */
-
                 TextEntry::make('company_name')
                     ->label('Denumire firmă')
                     ->placeholder('-'),
@@ -89,12 +71,6 @@ class OrderInfolist
                 TextEntry::make('company_county')
                     ->label('Județ firmă')
                     ->placeholder('-'),
-
-                /*
-                |--------------------------------------------------------------------------
-                | ADRESĂ LIVRARE
-                |--------------------------------------------------------------------------
-                */
 
                 TextEntry::make('shipping_first_name')
                     ->label('Prenume livrare')
@@ -124,12 +100,6 @@ class OrderInfolist
                     ->label('Cod poștal livrare')
                     ->placeholder('-'),
 
-                /*
-                |--------------------------------------------------------------------------
-                | TOTALURI
-                |--------------------------------------------------------------------------
-                */
-
                 TextEntry::make('subtotal')
                     ->label('Subtotal')
                     ->money('RON'),
@@ -142,165 +112,121 @@ class OrderInfolist
                     ->label('Total')
                     ->money('RON'),
 
-               /*
-|--------------------------------------------------------------------------
-| PLATĂ
-|--------------------------------------------------------------------------
-*/
+                TextEntry::make('payment_method')
+                    ->label('Metodă plată')
+                    ->badge()
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        'cash' => 'Ramburs',
+                        'stripe' => 'Card bancar',
+                        default => $state,
+                    })
+                    ->color(fn (string $state): string => match ($state) {
+                        'cash' => 'warning',
+                        'stripe' => 'success',
+                        default => 'gray',
+                    }),
 
-TextEntry::make('payment_method')
-    ->label('Metodă plată')
-    ->badge()
-    ->formatStateUsing(fn (string $state): string => match ($state) {
-        'cash' => 'Ramburs',
-        'stripe' => 'Card bancar',
-        default => $state,
-    })
-    ->color(fn (string $state): string => match ($state) {
-        'cash' => 'warning',
-        'stripe' => 'success',
-        default => 'gray',
-    }),
+                TextEntry::make('payment_status')
+                    ->label('Status plată')
+                    ->badge()
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        'pending' => 'În așteptare',
+                        'paid' => 'Plătită',
+                        'failed' => 'Eșuată',
+                        'refunded' => 'Rambursată',
+                        default => $state,
+                    })
+                    ->color(fn (string $state): string => match ($state) {
+                        'pending' => 'warning',
+                        'paid' => 'success',
+                        'failed' => 'danger',
+                        'refunded' => 'gray',
+                        default => 'gray',
+                    }),
 
-TextEntry::make('payment_status')
-    ->label('Status plată')
-    ->badge()
-    ->formatStateUsing(fn (string $state): string => match ($state) {
-        'pending' => 'În așteptare',
-        'paid' => 'Plătită',
-        'failed' => 'Eșuată',
-        default => $state,
-    })
-    ->color(fn (string $state): string => match ($state) {
-        'pending' => 'warning',
-        'paid' => 'success',
-        'failed' => 'danger',
-        default => 'gray',
-    }),
+                TextEntry::make('courier')
+                    ->label('Curier')
+                    ->placeholder('-'),
 
-TextEntry::make('courier')
-    ->label('Curier')
-    ->placeholder('-'),
+                TextEntry::make('awb_number')
+                    ->label('AWB')
+                    ->placeholder('-'),
 
-TextEntry::make('awb_number')
-    ->label('AWB')
-    ->placeholder('-'),
+                TextEntry::make('tracking_url')
+                    ->label('Tracking')
+                    ->url(fn (?string $state) => $state)
+                    ->openUrlInNewTab()
+                    ->placeholder('-'),
 
-TextEntry::make('tracking_url')
-    ->label('Tracking')
-    ->url(fn (?string $state) => $state)
-    ->openUrlInNewTab()
-    ->placeholder('-'),
-
-TextEntry::make('shipped_at')
-    ->label('Expediată la')
-    ->dateTime('d.m.Y H:i')
-    ->placeholder('-'),
-
-/*
-|--------------------------------------------------------------------------
-| STATUS
-|--------------------------------------------------------------------------
-*/
-
-TextEntry::make('status')
-    ->label('Status comandă')
-    ->badge()
-    ->formatStateUsing(fn (string $state): string => match ($state) {
-        'pending' => 'În așteptare',
-        'processing' => 'În procesare',
-        'shipped' => 'Expediată',
-        'delivered' => 'Livrată',
-        'cancelled' => 'Anulată',
-        default => $state,
-    })
-    ->color(fn (string $state): string => match ($state) {
-        'pending' => 'warning',
-        'processing' => 'info',
-        'shipped' => 'primary',
-        'delivered' => 'success',
-        'cancelled' => 'danger',
-        default => 'gray',
-    }),
+                TextEntry::make('shipped_at')
+                    ->label('Expediată la')
+                    ->dateTime('d.m.Y H:i')
+                    ->placeholder('-'),
 
                 TextEntry::make('status')
-    ->label('Status comandă')
-    ->badge()
-    ->formatStateUsing(fn (string $state): string => match ($state) {
-
-        'pending' => 'În așteptare',
-
-        'processing' => 'În procesare',
-
-        'shipped' => 'Expediată',
-
-        'delivered' => 'Livrată',
-
-        'cancelled' => 'Anulată',
-
-        default => $state,
-
-    })
-    ->color(fn (string $state): string => match ($state) {
-
-        'pending' => 'warning',
-
-        'processing' => 'info',
-
-        'shipped' => 'primary',
-
-        'delivered' => 'success',
-
-        'cancelled' => 'danger',
-
-        default => 'gray',
-
-    }),
+                    ->label('Status comandă')
+                    ->badge()
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        'pending' => 'În așteptare',
+                        'processing' => 'În procesare',
+                        'shipped' => 'Expediată',
+                        'delivered' => 'Livrată',
+                        'cancelled' => 'Anulată',
+                        default => $state,
+                    })
+                    ->color(fn (string $state): string => match ($state) {
+                        'pending' => 'warning',
+                        'processing' => 'info',
+                        'shipped' => 'primary',
+                        'delivered' => 'success',
+                        'cancelled' => 'danger',
+                        default => 'gray',
+                    }),
 
                 TextEntry::make('notes')
                     ->label('Observații')
                     ->placeholder('-')
                     ->columnSpanFull(),
 
+                RepeatableEntry::make('items')
+                    ->label('Produse comandate')
+                    ->schema([
+
+                        TextEntry::make('product_name')
+                            ->label('Produs')
+                            ->weight('bold')
+                            ->columnSpan(2),
+
+                        TextEntry::make('product.sku')
+                            ->label('SKU')
+                            ->placeholder('-'),
+
+                        TextEntry::make('quantity')
+                            ->label('Cantitate')
+                            ->badge(),
+
+                        TextEntry::make('price')
+                            ->label('Preț unitar')
+                            ->money('RON')
+                            ->color('gray'),
+
+                        TextEntry::make('total')
+                            ->label('Total')
+                            ->money('RON')
+                            ->color('success')
+                            ->weight('bold'),
+
+                    ])
+                    ->columns(6)
+                    ->columnSpanFull(),
+
                 TextEntry::make('created_at')
                     ->label('Creată la')
-                    ->dateTime(),
-
-                    RepeatableEntry::make('items')
-    ->label('Produse comandate')
-    ->schema([
-
-        TextEntry::make('product_name')
-            ->label('Produs')
-            ->weight('bold')
-            ->columnSpan(2),
-
-        TextEntry::make('product.sku')
-            ->label('SKU')
-            ->placeholder('-'),
-
-        TextEntry::make('quantity')
-            ->label('Cantitate')
-            ->badge(),
-
-        TextEntry::make('price')
-            ->label('Preț unitar')
-            ->money('RON')
-            ->color('gray'),
-
-        TextEntry::make('total')
-            ->label('Total')
-            ->money('RON')
-            ->color('success')
-            ->weight('bold'),
-
-    ])
-    ->columns(6)
-    ->columnSpanFull(),
+                    ->dateTime('d.m.Y H:i'),
 
                 TextEntry::make('updated_at')
                     ->label('Actualizată la')
-                    ->dateTime(),
+                    ->dateTime('d.m.Y H:i'),
 
             ]);
     }

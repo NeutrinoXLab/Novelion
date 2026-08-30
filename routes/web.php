@@ -1,7 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-
+use App\Http\Controllers\NewsletterController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\CategoryController;
@@ -37,6 +37,12 @@ Route::get('/produse', [ProductController::class, 'index'])
 
 Route::get('/produse-noi', [ProductController::class, 'newProducts'])
     ->name('products.new');
+
+    Route::post('/newsletter/subscribe', [NewsletterController::class, 'subscribe'])
+    ->name('newsletter.subscribe');
+
+    Route::get('/newsletter/unsubscribe/{token}', [NewsletterController::class, 'unsubscribe'])
+    ->name('newsletter.unsubscribe');
 
 Route::get('/promotii', [ProductController::class, 'promotions'])
     ->name('products.promotions');

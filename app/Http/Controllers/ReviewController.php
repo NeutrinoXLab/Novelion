@@ -35,7 +35,12 @@ class ReviewController extends Controller
 
         } catch (\Throwable $e) {
 
-            dd($e->getMessage());
+            report($e);
+
+            return back()->with(
+                'error',
+                'Recenzia nu a putut fi trimisă. Te rugăm să încerci din nou.'
+            );
 
         }
     }

@@ -228,6 +228,10 @@ class CheckoutController extends Controller
      */
     public function cancel(Order $order)
     {
+        if ($order->user_id !== auth()->id()) {
+            abort(403);
+        }
+
         $this->orderService->markAsFailed($order);
 
         return redirect()

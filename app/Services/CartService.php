@@ -16,11 +16,12 @@ class CartService
     {
         $cart = session()->get($this->sessionKey, []);
 
-        foreach ($cart as &$item) {
+        foreach ($cart as $key => &$item) {
 
             $product = Product::find($item['id']);
 
-            if (! $product) {
+            if (! $product || ! $product->is_active) {
+                unset($cart[$key]);
                 continue;
             }
 
@@ -65,6 +66,12 @@ class CartService
      */
     public function add(Product $product, int $quantity = 1): void
     {
+        if (! $product->is_active) {
+            throw new \Exception(
+                'Acest produs nu mai este disponibil.'
+            );
+        }
+
         $cart = session()->get($this->sessionKey, []);
 
         if (isset($cart[$product->id])) {

@@ -16,8 +16,6 @@ use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\StripeWebhookController;
 
-use App\Models\Order;
-use App\Services\InvoiceService;
 
 
 /*
@@ -222,20 +220,7 @@ Route::post('/stripe/webhook', [StripeWebhookController::class, 'handle'])
     ->name('stripe.webhook');
 
 
-/*
-|--------------------------------------------------------------------------
-| Test factură PDF
-|--------------------------------------------------------------------------
-*/
 
-Route::get('/test-invoice/{order}', function (
-    Order $order,
-    InvoiceService $invoiceService
-) {
-    return $invoiceService
-        ->generate($order)
-        ->stream('factura.pdf');
-});
 
 
 require __DIR__.'/auth.php';

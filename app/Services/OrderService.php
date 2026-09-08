@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\Product;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -25,7 +26,10 @@ class OrderService
 
             foreach ($cart->getCart() as $item) {
 
-                $product = $item['product'];
+                $product = Product::query()
+                    ->whereKey($item['product']->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
                 if ($item['quantity'] > $product->stock_quantity) {
                     throw new \Exception(

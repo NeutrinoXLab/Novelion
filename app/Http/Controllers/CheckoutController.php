@@ -213,6 +213,10 @@ class CheckoutController extends Controller
      */
     public function success(Order $order, CartService $cart)
     {
+        if ($order->user_id !== auth()->id()) {
+            abort(403);
+        }
+
         $cart->clear();
 
         return redirect()

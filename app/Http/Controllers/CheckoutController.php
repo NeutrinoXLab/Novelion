@@ -199,11 +199,13 @@ class CheckoutController extends Controller
 
         } catch (\Exception $e) {
 
+            report($e);
+
             return back()
                 ->withInput()
                 ->with(
                     'error',
-                    $e->getMessage()
+                    'A apărut o eroare la procesarea comenzii. Te rugăm să încerci din nou.'
                 );
         }
     }

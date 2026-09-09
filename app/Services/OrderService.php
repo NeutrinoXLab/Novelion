@@ -233,36 +233,26 @@ class OrderService
     }
 
     /**
-     * Marchează plata ca eșuată.
+     * Restaurează stocul unei comenzi o singură dată.
+     *
+     * Folosește lockForUpdate() pentru a preveni
+     * restaurarea dublă în cazul webhook-urilor repetate
+     * sau al mai multor acțiuni simultane.
      */
-    public function markAsFailed(Order $order): void
-    {
-        $order->update([
-            'payment_status' => 'failed',
-            'status' => 'cancelled',
-        ]);
-    }
-
-    /**
-     * Anulează comanda și reface stocul.
-     */
-    public function cancel(Order $order): void
+    public function restoreStock(Order $order): void
     {
         DB::transaction(function () use ($order) {
 
-            /*
-             * Luăm statusul real din baza de date.
-             *
-             * Este important deoarece această metodă este apelată
-             * înainte ca Filament să salveze noul status.
-             */
-            $currentStatus = $order->getRawOriginal('status');
+            $order = Order::query()
+                ->whereKey($order->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
             /*
-             * Dacă această comandă este deja anulată,
-             * nu mai refacem stocul.
+             * Dacă stocul a fost deja restaurat,
+             * nu mai facem nimic.
              */
-            if ($currentStatus === 'cancelled') {
+            if ($order->stock_restored_at !== null) {
                 return;
             }
 
@@ -284,15 +274,66 @@ class OrderService
             }
 
             /*
-             * Păstrăm statusul plății dacă plata Stripe
-             * a fost deja efectuată.
+             * Marcăm restaurarea ca efectuată.
              */
-            $paymentStatus = $order->payment_status;
+            $order->update([
+                'stock_restored_at' => now(),
+            ]);
+        });
+    }
+
+    /**
+     * Marchează plata ca eșuată și reface stocul.
+     */
+    public function markAsFailed(Order $order): void
+    {
+        DB::transaction(function () use ($order) {
+
+            $order->update([
+                'payment_status' => 'failed',
+                'status' => 'cancelled',
+            ]);
+
+            $this->restoreStock($order);
+        });
+    }
+
+    /**
+     * Anulează comanda și reface stocul.
+     *
+     * O comandă deja plătită nu poate fi anulată direct.
+     * Pentru aceasta trebuie efectuat mai întâi refund-ul Stripe.
+     */
+    public function cancel(Order $order): void
+    {
+        DB::transaction(function () use ($order) {
+
+            /*
+             * Luăm starea actuală din baza de date.
+             *
+             * Este important deoarece această metodă este apelată
+             * înainte ca Filament să salveze noul status.
+             */
+            $order->refresh();
+
+            $currentStatus = $order->status;
+
+            /*
+             * O comandă deja plătită trebuie rambursată înainte
+             * de a putea fi anulată.
+             */
+            if ($order->payment_status === 'paid') {
+                throw new \RuntimeException(
+                    'Comanda este deja plătită și trebuie rambursată înainte de anulare.'
+                );
+            }
 
             /*
              * Pentru ramburs, dacă plata nu a fost făcută,
              * anularea marchează plata ca eșuată.
              */
+            $paymentStatus = $order->payment_status;
+
             if (
                 $order->payment_method === 'cash' &&
                 $order->payment_status === 'pending'
@@ -300,10 +341,24 @@ class OrderService
                 $paymentStatus = 'failed';
             }
 
-            $order->update([
-                'status' => 'cancelled',
-                'payment_status' => $paymentStatus,
-            ]);
+            /*
+             * Dacă această comandă este deja anulată,
+             * nu mai schimbăm statusul.
+             */
+            if ($currentStatus !== 'cancelled') {
+                $order->update([
+                    'status' => 'cancelled',
+                    'payment_status' => $paymentStatus,
+                ]);
+            }
+
+            /*
+             * Refacem stocul.
+             *
+             * restoreStock() este idempotent:
+             * dacă stocul a fost deja restaurat, nu îl adaugă din nou.
+             */
+            $this->restoreStock($order);
         });
     }
 }

@@ -4,8 +4,6 @@ namespace App\Filament\Resources\Orders\Tables;
 
 use App\Services\InvoiceService;
 use Filament\Actions\Action;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Table;
@@ -248,16 +246,6 @@ class OrdersTable
                         );
 
                     }),
-
-            ])
-
-            ->toolbarActions([
-
-                BulkActionGroup::make([
-
-                    DeleteBulkAction::make(),
-
-                ]),
 
             ]);
     }

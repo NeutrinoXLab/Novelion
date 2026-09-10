@@ -30,12 +30,12 @@ class ViewOrder extends ViewRecord
                     }
 
                     /*
-                     * Dacă există deja un retur rambursat,
-                     * plata nu mai poate fi rambursată din nou
+                     * Dacă există un retur activ sau rambursat,
+                     * plata nu mai poate fi rambursată manual
                      * din pagina comenzii.
                      */
                     return ! $this->record->returnRequests()
-                        ->where('status', 'refunded')
+                        ->whereNotIn('status', ['rejected'])
                         ->exists();
                 })
                 ->requiresConfirmation()
@@ -59,17 +59,17 @@ class ViewOrder extends ViewRecord
 
                         /*
                          * Protecție suplimentară:
-                         * verificăm din nou existența unui retur rambursat
+                         * verificăm din nou existența unui retur activ sau rambursat
                          * înainte de a trimite cererea către Stripe.
                          */
-                        $hasRefundedReturn = $this->record
+                        $hasActiveReturn = $this->record
                             ->returnRequests()
-                            ->where('status', 'refunded')
+                            ->whereNotIn('status', ['rejected'])
                             ->exists();
 
-                        if ($hasRefundedReturn) {
+                        if ($hasActiveReturn) {
                             throw new \RuntimeException(
-                                'Această comandă are deja un retur rambursat.'
+                                'Această comandă are deja un retur activ sau rambursat.'
                             );
                         }
 

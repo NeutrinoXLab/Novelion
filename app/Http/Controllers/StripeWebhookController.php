@@ -99,7 +99,10 @@ class StripeWebhookController extends Controller
                     ]);
                 }
 
-                if ($order->payment_status !== 'paid') {
+                if (
+                    $order->payment_status !== 'paid' &&
+                    $order->status !== 'cancelled'
+                ) {
                     $this->orderService->markAsFailed($order);
                 }
             }

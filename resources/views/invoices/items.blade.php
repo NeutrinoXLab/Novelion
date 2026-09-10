@@ -1,15 +1,14 @@
 <table class="products">
 
     <thead>
-
         <tr>
 
-            <th width="5%" class="text-center">
-                Nr.
+            <th width="6%" class="text-center">
+                Nr. crt.
             </th>
 
-            <th width="40%">
-                Denumire produs
+            <th width="44%">
+                Denumire produse/servicii
             </th>
 
             <th width="10%" class="text-center">
@@ -17,19 +16,18 @@
             </th>
 
             <th width="10%" class="text-center">
-                Cant.
+                Cantitate
             </th>
 
             <th width="15%" class="text-right">
                 Preț unitar
             </th>
 
-            <th width="20%" class="text-right">
+            <th width="15%" class="text-right">
                 Valoare
             </th>
 
         </tr>
-
     </thead>
 
     <tbody>
@@ -43,9 +41,7 @@
                 </td>
 
                 <td>
-                    <strong>
-                        {{ $item->product_name }}
-                    </strong>
+                    {{ $item->product_name }}
                 </td>
 
                 <td class="text-center">
@@ -53,19 +49,15 @@
                 </td>
 
                 <td class="text-center">
-                    {{ $item->quantity }}
+                    {{ number_format($item->quantity, 3, '.', '') }}
                 </td>
 
                 <td class="text-right">
-                    {{ number_format($item->price, 2, ',', '.') }}
-                    RON
+                    {{ number_format($item->price, 2, ',', '.') }} RON
                 </td>
 
                 <td class="text-right">
-                    <strong>
-                        {{ number_format($item->total, 2, ',', '.') }}
-                        RON
-                    </strong>
+                    {{ number_format($item->total, 2, ',', '.') }} RON
                 </td>
 
             </tr>

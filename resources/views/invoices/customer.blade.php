@@ -13,16 +13,27 @@
 
             <br><br>
 
-            Ploiești, Prahova
+            <strong>CUI:</strong>
+            52627291
 
             <br>
 
-            CUI: 52627291
+            <strong>Reg. Comerțului:</strong>
+            J2025075714007
+
+            <br><br>
+
+            PLOIEȘTI, Str. Daciei nr. 11, jud. PRAHOVA
+
+            <br>
+
+            BANCA TRANSILVANIA
+
+            <br>
+
+            RO85 BTRL RONC RT0D A929 1801
 
         </td>
-
-
-        <td width="4%"></td>
 
 
         {{-- CLIENT --}}

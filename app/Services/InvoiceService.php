@@ -18,6 +18,6 @@ class InvoiceService
                 'order' => $order,
             ]
         )
-        ->setPaper('a4');
+        ->setPaper('a4', 'landscape');
     }
 }

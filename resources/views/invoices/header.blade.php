@@ -1,98 +1,57 @@
 <div class="header">
 
-    <div class="left box">
+    <table>
+        <tr>
 
-        <div class="company-name">
-            NOVELION S.R.L.
-        </div>
+            <td style="width: 70%; vertical-align: top;">
 
-        <br>
+                <div class="invoice-title" style="text-align: left;">
+                    FACTURĂ
+                </div>
 
-        Str. Daciei nr. 11<br>
-        Ploiești, Prahova<br>
-        Cod poștal: 100352
+                <table class="invoice-meta">
 
-        <br><br>
+                    <tr>
+                        <td style="width: 80px;">
+                            <strong>Număr:</strong>
+                        </td>
 
-        <strong>CUI:</strong> 52627291<br>
-        <strong>Reg. Comerțului:</strong> J2025075714007<br>
+                        <td>
+                            {{ $order->order_number }}
+                        </td>
+                    </tr>
 
-        <strong>IBAN:</strong><br>
-        RO85BTRLRONCRT0DA9291801
+                    <tr>
+                        <td>
+                            <strong>Data:</strong>
+                        </td>
 
-        <br>
+                        <td>
+                            {{ $order->created_at->format('d.m.Y') }}
+                        </td>
+                    </tr>
 
-        <strong>Banca:</strong>
-        Banca Transilvania
+                    <tr>
+                        <td>
+                            <strong>Scadent la:</strong>
+                        </td>
 
-        <br>
+                        <td>
+                            {{ $order->created_at->format('d.m.Y') }}
+                        </td>
+                    </tr>
 
-        <strong>Telefon:</strong>
-        0750 444 672
+                </table>
 
-        <br>
+            </td>
 
-        <strong>Email:</strong>
-        novelionprime@gmail.com
+            <td style="width: 30%; text-align: right; vertical-align: top;">
 
-    </div>
+                <strong></strong>
 
-    <div class="right box">
+            </td>
 
-        <div class="invoice-title">
-            FACTURĂ FISCALĂ
-        </div>
-
-        <table class="invoice-meta">
-
-            <tr>
-                <td>
-                    <strong>Factura:</strong>
-                </td>
-
-                <td class="text-right">
-                    {{ $order->order_number }}
-                </td>
-            </tr>
-
-            <tr>
-                <td>
-                    <strong>Data:</strong>
-                </td>
-
-                <td class="text-right">
-                    {{ $order->created_at->format('d.m.Y') }}
-                </td>
-            </tr>
-
-            <tr>
-                <td>
-                    <strong>Ora:</strong>
-                </td>
-
-                <td class="text-right">
-                    {{ $order->created_at->format('H:i') }}
-                </td>
-            </tr>
-
-            <tr>
-                <td>
-                    <strong>Plată:</strong>
-                </td>
-
-                <td class="text-right">
-
-                    {{ $order->payment_method === 'cash'
-                        ? 'Ramburs'
-                        : 'Card bancar' }}
-
-                </td>
-            </tr>
-
-        </table>
-
-    </div>
-
-    <div class="clear"></div>
+        </tr>
+    </table>
 
 </div>

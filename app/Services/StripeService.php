@@ -179,14 +179,19 @@ class StripeService
          * charge.refunded să poată identifica faptul că este un refund
          * pentru retur și să nu restaureze stocul încă o dată.
          */
-        $refund = Refund::create([
-            'payment_intent' => $order->stripe_payment_intent,
+        $refund = Refund::create(
+            [
+                'payment_intent' => $order->stripe_payment_intent,
 
-            'metadata' => [
-                'return_request_id' => (string) $return->id,
-                'order_id' => (string) $order->id,
+                'metadata' => [
+                    'return_request_id' => (string) $return->id,
+                    'order_id' => (string) $order->id,
+                ],
             ],
-        ]);
+            [
+                'idempotency_key' => 'return-refund-' . $return->id,
+            ]
+        );
 
         /*
          * Salvăm imediat ID-ul Stripe și momentul rambursării.

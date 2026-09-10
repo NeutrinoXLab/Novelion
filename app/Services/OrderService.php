@@ -222,7 +222,10 @@ class OrderService
      */
     public function markAsPaid(Order $order): void
     {
-        if ($order->payment_status === 'paid') {
+        if (
+            $order->payment_status === 'paid' ||
+            $order->status === 'cancelled'
+        ) {
             return;
         }
 

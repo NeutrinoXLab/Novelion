@@ -24,12 +24,30 @@ class ViewOrder extends ViewRecord
                 ->label('Rambursează plata')
                 ->icon('heroicon-o-arrow-uturn-left')
                 ->color('danger')
-                ->visible(fn () => $this->record->payment_status === 'paid')
+                ->visible(function () {
+                    if ($this->record->payment_status !== 'paid') {
+                        return false;
+                    }
+
+                    /*
+                     * Dacă există deja un retur rambursat,
+                     * plata nu mai poate fi rambursată din nou
+                     * din pagina comenzii.
+                     */
+                    return ! $this->record->returnRequests()
+                        ->where('status', 'refunded')
+                        ->exists();
+                })
                 ->requiresConfirmation()
                 ->modalHeading('Rambursare plată')
                 ->modalDescription(
-                    fn () => 'Ești sigur că vrei să rambursezi suma de '
-                        . number_format((float) $this->record->subtotal, 2, ',', '.')
+                    fn () => 'Ești sigur că vrei să rambursezi suma totală de '
+                        . number_format(
+                            (float) $this->record->total,
+                            2,
+                            ',',
+                            '.'
+                        )
                         . ' lei pentru comanda '
                         . $this->record->order_number
                         . '?'
@@ -39,15 +57,31 @@ class ViewOrder extends ViewRecord
 
                     try {
 
+                        /*
+                         * Protecție suplimentară:
+                         * verificăm din nou existența unui retur rambursat
+                         * înainte de a trimite cererea către Stripe.
+                         */
+                        $hasRefundedReturn = $this->record
+                            ->returnRequests()
+                            ->where('status', 'refunded')
+                            ->exists();
+
+                        if ($hasRefundedReturn) {
+                            throw new \RuntimeException(
+                                'Această comandă are deja un retur rambursat.'
+                            );
+                        }
+
                         app(StripeService::class)
                             ->refundPayment($this->record);
 
                         Notification::make()
                             ->title('Plata a fost rambursată.')
                             ->body(
-                                'Suma de '
+                                'Suma totală de '
                                 . number_format(
-                                    (float) $this->record->subtotal,
+                                    (float) $this->record->total,
                                     2,
                                     ',',
                                     '.'

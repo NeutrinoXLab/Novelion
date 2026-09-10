@@ -201,6 +201,17 @@ class CheckoutController extends Controller
 
             report($e);
 
+            /*
+            |--------------------------------------------------------------------------
+            | Dacă plata Stripe nu poate fi inițiată,
+            | eliberăm stocul rezervat pentru comandă.
+            |--------------------------------------------------------------------------
+            */
+
+            if (isset($order)) {
+                $this->orderService->markAsFailed($order);
+            }
+
             return back()
                 ->withInput()
                 ->with(

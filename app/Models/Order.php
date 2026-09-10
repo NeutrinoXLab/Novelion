@@ -6,6 +6,7 @@ use App\Mail\OrderCancelledMail;
 use App\Mail\OrderDeliveredMail;
 use App\Mail\OrderShippedMail;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Mail;
 
 class Order extends Model
@@ -94,7 +95,13 @@ class Order extends Model
         */
 
         'status',
+        'stock_restored_at',
+        'delivered_at',
         'notes',
+    ];
+
+    protected $casts = [
+        'delivered_at' => 'datetime',
     ];
 
     /**
@@ -148,5 +155,13 @@ class Order extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Solicitările de retur ale comenzii.
+     */
+    public function returnRequests(): HasMany
+    {
+        return $this->hasMany(ReturnRequest::class);
     }
 }

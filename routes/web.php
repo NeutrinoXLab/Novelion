@@ -15,7 +15,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\StripeWebhookController;
-
+use App\Http\Controllers\ReturnRequestController;
 
 
 /*
@@ -153,6 +153,19 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/my-orders/{order}', [MyOrderController::class, 'show'])
         ->name('my-orders.show');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Retururi
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get('/my-orders/{order}/return', [ReturnRequestController::class, 'create'])
+        ->name('returns.create');
+
+    Route::post('/my-orders/{order}/return', [ReturnRequestController::class, 'store'])
+        ->name('returns.store');
 
 
     /*

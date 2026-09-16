@@ -7,6 +7,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class ProfileController extends Controller
@@ -48,9 +49,17 @@ class ProfileController extends Controller
 
         $user = $request->user();
 
+        abort_if($user->is_admin, 403);
+
         Auth::logout();
 
-        $user->delete();
+        $user->forceFill([
+            'name' => 'Cont șters',
+            'email' => 'deleted-'.$user->id.'-'.Str::random(16).'@invalid.local',
+            'password' => Str::random(64),
+            'remember_token' => null,
+            'account_deleted_at' => now(),
+        ])->save();
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();

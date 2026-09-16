@@ -1,22 +1,23 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\NewsletterController;
-use App\Http\Controllers\HomeController;
-use App\Http\Controllers\ProductController;
-use App\Http\Controllers\CategoryController;
-use App\Http\Controllers\PageController;
 use App\Http\Controllers\CartController;
-use App\Http\Controllers\CheckoutController;
-use App\Http\Controllers\MyOrderController;
-use App\Http\Controllers\WishlistController;
-use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\ProfileController;
-use App\Http\Controllers\ReviewController;
+use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ChatController;
-use App\Http\Controllers\StripeWebhookController;
+use App\Http\Controllers\CheckoutController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\HomeController;
+use App\Http\Controllers\MyOrderController;
+use App\Http\Controllers\NewsletterController;
+use App\Http\Controllers\PageController;
+use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReturnRequestController;
-
+use App\Http\Controllers\ReviewController;
+use App\Http\Controllers\StripeWebhookController;
+use App\Http\Controllers\WishlistController;
+use App\Models\ReturnPhoto;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 
 /*
 |--------------------------------------------------------------------------
@@ -36,11 +37,14 @@ Route::get('/produse', [ProductController::class, 'index'])
 Route::get('/produse-noi', [ProductController::class, 'newProducts'])
     ->name('products.new');
 
-    Route::post('/newsletter/subscribe', [NewsletterController::class, 'subscribe'])
+Route::post('/newsletter/subscribe', [NewsletterController::class, 'subscribe'])
+    ->middleware('throttle:5,1')
     ->name('newsletter.subscribe');
 
-    Route::get('/newsletter/unsubscribe/{token}', [NewsletterController::class, 'unsubscribe'])
+Route::get('/newsletter/unsubscribe/{token}', [NewsletterController::class, 'unsubscribe'])
     ->name('newsletter.unsubscribe');
+Route::get('/newsletter/confirm/{token}', [NewsletterController::class, 'confirm'])
+    ->middleware('throttle:10,1')->name('newsletter.confirm');
 
 Route::get('/promotii', [ProductController::class, 'promotions'])
     ->name('products.promotions');
@@ -53,7 +57,6 @@ Route::get('/categorii', [CategoryController::class, 'index'])
 
 Route::get('/categorie/{category:slug}', [CategoryController::class, 'show'])
     ->name('categories.show');
-
 
 /*
 |--------------------------------------------------------------------------
@@ -79,7 +82,6 @@ Route::get('/termeni-si-conditii', [PageController::class, 'terms'])
 Route::get('/politica-de-confidentialitate', [PageController::class, 'privacy'])
     ->name('pages.privacy');
 
-
 /*
 |--------------------------------------------------------------------------
 | Chat
@@ -87,11 +89,12 @@ Route::get('/politica-de-confidentialitate', [PageController::class, 'privacy'])
 */
 
 Route::get('/chat', [ChatController::class, 'index'])
+    ->middleware('throttle:30,1')
     ->name('chat.index');
 
 Route::post('/chat/send', [ChatController::class, 'send'])
+    ->middleware('throttle:10,1')
     ->name('chat.send');
-
 
 /*
 |--------------------------------------------------------------------------
@@ -114,7 +117,6 @@ Route::delete('/cart/remove/{product}', [CartController::class, 'remove'])
 Route::post('/cart/clear', [CartController::class, 'clear'])
     ->name('cart.clear');
 
-
 /*
 |--------------------------------------------------------------------------
 | Rute protejate
@@ -122,6 +124,12 @@ Route::post('/cart/clear', [CartController::class, 'clear'])
 */
 
 Route::middleware('auth')->group(function () {
+    Route::get('/admin/return-photos/{photo}', function (ReturnPhoto $photo) {
+        abort_unless(auth()->user()?->is_admin, 403);
+        abort_unless(Storage::disk('local')->exists($photo->path), 404);
+
+        return Storage::disk('local')->download($photo->path);
+    })->name('returns.photos.download');
 
     /*
     |--------------------------------------------------------------------------
@@ -141,6 +149,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/checkout/cancel/{order}', [CheckoutController::class, 'cancel'])
         ->name('checkout.cancel');
 
+    Route::post('/checkout/cancel/{order}', [CheckoutController::class, 'cancelOrder'])
+        ->name('checkout.cancel-order');
 
     /*
     |--------------------------------------------------------------------------
@@ -154,7 +164,6 @@ Route::middleware('auth')->group(function () {
     Route::get('/my-orders/{order}', [MyOrderController::class, 'show'])
         ->name('my-orders.show');
 
-
     /*
     |--------------------------------------------------------------------------
     | Retururi
@@ -167,6 +176,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/my-orders/{order}/return', [ReturnRequestController::class, 'store'])
         ->name('returns.store');
 
+    Route::get('/my-returns/{return}/bank-details', [ReturnRequestController::class, 'bankDetails'])
+        ->name('returns.bank-details');
+    Route::post('/my-returns/{return}/bank-details', [ReturnRequestController::class, 'saveBankDetails'])
+        ->name('returns.bank-details.store');
 
     /*
     |--------------------------------------------------------------------------
@@ -180,7 +193,6 @@ Route::middleware('auth')->group(function () {
     Route::post('/wishlist/{product}', [WishlistController::class, 'toggle'])
         ->name('wishlist.toggle');
 
-
     /*
     |--------------------------------------------------------------------------
     | Recenzii
@@ -191,7 +203,6 @@ Route::middleware('auth')->group(function () {
         ->name('reviews.store');
 });
 
-
 /*
 |--------------------------------------------------------------------------
 | Dashboard
@@ -201,7 +212,6 @@ Route::middleware('auth')->group(function () {
 Route::get('/dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'verified'])
     ->name('dashboard');
-
 
 /*
 |--------------------------------------------------------------------------
@@ -222,7 +232,6 @@ Route::middleware('auth')->group(function () {
 
 });
 
-
 /*
 |--------------------------------------------------------------------------
 | Stripe Webhook
@@ -231,9 +240,5 @@ Route::middleware('auth')->group(function () {
 
 Route::post('/stripe/webhook', [StripeWebhookController::class, 'handle'])
     ->name('stripe.webhook');
-
-
-
-
 
 require __DIR__.'/auth.php';

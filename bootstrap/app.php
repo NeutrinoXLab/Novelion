@@ -13,10 +13,6 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
 
-        $middleware->web(append: [
-            \App\Http\Middleware\TrackVisits::class,
-        ]);
-
         $middleware->validateCsrfTokens(
             except: [
                 'stripe/webhook',

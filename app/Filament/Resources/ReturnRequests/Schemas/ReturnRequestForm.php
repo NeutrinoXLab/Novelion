@@ -7,6 +7,7 @@ use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Illuminate\Support\HtmlString;
 
 class ReturnRequestForm
 {
@@ -27,6 +28,20 @@ class ReturnRequestForm
                         Placeholder::make('reason_display')
                             ->label('Motiv')
                             ->content(fn ($record) => $record?->reason ?? '—'),
+
+                        Placeholder::make('type_display')->label('Flux')
+                            ->content(fn ($record) => $record?->type === 'nonconformity' ? 'Produs defect/neconform' : 'Retragere'),
+                        Placeholder::make('items_display')->label('Produse și cantități')
+                            ->content(fn ($record) => $record?->items->map(fn ($item) => $item->orderItem?->product_name.' × '.$item->quantity)->implode(', ') ?: 'Retur anterior fără poziții'),
+                        Placeholder::make('refund_amount_display')->label('Sumă estimată')
+                            ->content(fn ($record) => $record?->refund_amount === null ? '—' : $record->refund_amount.' RON'),
+                        Placeholder::make('refund_status_display')->label('Stare rambursare')
+                            ->content(fn ($record) => $record?->refund_status ?? 'Neinițiată'),
+                        Placeholder::make('bank_iban_display')->label('IBAN comunicat')
+                            ->content(fn ($record) => $record?->bank_iban ?? '—'),
+
+                        Placeholder::make('photos_display')->label('Fotografii opționale')
+                            ->content(fn ($record) => new HtmlString($record?->photos->map(fn ($photo) => '<a href="'.e(route('returns.photos.download', $photo)).'" class="underline">Fotografie #'.$photo->id.'</a>')->implode('<br>') ?: 'Fără fotografii')),
 
                         Placeholder::make('notes_display')
                             ->label('Observații')

@@ -2,17 +2,17 @@
 
 namespace App\Filament\Resources\Products\RelationManagers;
 
+use App\Models\ProductImage;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
-use App\Models\ProductImage;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
-use Filament\Schemas\Components\Utilities\Get;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\ImageColumn;
@@ -36,23 +36,24 @@ class ImagesRelationManager extends RelationManager
                     ->directory('products')
                     ->image()
                     ->imageEditor()
+                    ->maxSize(5120)
                     ->required(),
 
                 Toggle::make('is_primary')
-    ->label('Imagine principală')
-    ->default(false)
-    ->live()
-    ->afterStateUpdated(function ($state, Get $get) {
+                    ->label('Imagine principală')
+                    ->default(false)
+                    ->live()
+                    ->afterStateUpdated(function ($state, Get $get) {
 
-        if (! $state) {
-            return;
-        }
+                        if (! $state) {
+                            return;
+                        }
 
-        ProductImage::where('product_id', $this->ownerRecord->id)
-            ->update([
-                'is_primary' => false,
-            ]);
-    }),
+                        ProductImage::where('product_id', $this->ownerRecord->id)
+                            ->update([
+                                'is_primary' => false,
+                            ]);
+                    }),
 
                 TextInput::make('sort_order')
                     ->label('Ordine')
@@ -73,10 +74,10 @@ class ImagesRelationManager extends RelationManager
             ->columns([
 
                 ImageColumn::make('image_path')
-    ->label('Imagine')
-    ->disk('public')
-    ->square()
-    ->size(60),
+                    ->label('Imagine')
+                    ->disk('public')
+                    ->square()
+                    ->size(60),
 
                 IconColumn::make('is_primary')
                     ->label('Principală')

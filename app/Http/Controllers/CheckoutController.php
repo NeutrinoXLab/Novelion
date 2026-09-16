@@ -2,15 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\OrderPlacedMail;
 use App\Models\Order;
 use App\Services\CartService;
 use App\Services\OrderService;
 use App\Services\StripeService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 
 class CheckoutController extends Controller
 {
     protected OrderService $orderService;
+
     protected StripeService $stripeService;
 
     public function __construct(
@@ -28,6 +31,10 @@ class CheckoutController extends Controller
     {
         if ($cart->count() === 0) {
             return redirect()->route('cart.index');
+        }
+
+        if (! $cart->canShip()) {
+            return redirect()->route('cart.index')->with('error', 'Livrarea nu poate fi calculată pentru acest coș. Verifică din nou mai târziu sau contactează-ne.');
         }
 
         return view('checkout.index', [
@@ -52,6 +59,10 @@ class CheckoutController extends Controller
     {
         if ($cart->count() === 0) {
             return redirect()->route('cart.index');
+        }
+
+        if (! $cart->canShip()) {
+            return redirect()->route('cart.index')->with('error', 'Livrarea nu poate fi calculată; comanda nu poate fi finalizată.');
         }
 
         $validated = $request->validate([
@@ -88,23 +99,17 @@ class CheckoutController extends Controller
             |--------------------------------------------------------------------------
             */
 
-            'company_name' =>
-                'required_if:customer_type,company|nullable|string|max:255',
+            'company_name' => 'required_if:customer_type,company|nullable|string|max:255',
 
-            'company_vat' =>
-                'required_if:customer_type,company|nullable|string|max:100',
+            'company_vat' => 'required_if:customer_type,company|nullable|string|max:100',
 
-            'company_registration' =>
-                'nullable|string|max:100',
+            'company_registration' => 'nullable|string|max:100',
 
-            'company_address' =>
-                'required_if:customer_type,company|nullable|string|max:255',
+            'company_address' => 'required_if:customer_type,company|nullable|string|max:255',
 
-            'company_city' =>
-                'required_if:customer_type,company|nullable|string|max:100',
+            'company_city' => 'required_if:customer_type,company|nullable|string|max:100',
 
-            'company_county' =>
-                'required_if:customer_type,company|nullable|string|max:100',
+            'company_county' => 'required_if:customer_type,company|nullable|string|max:100',
 
             /*
             |--------------------------------------------------------------------------
@@ -158,7 +163,7 @@ class CheckoutController extends Controller
                 $validated['address'];
 
             $validated['shipping_postal_code'] =
-                $validated['postal_code'];
+                $validated['postal_code'] ?? null;
         }
 
         try {
@@ -181,6 +186,8 @@ class CheckoutController extends Controller
             */
 
             if ($validated['payment_method'] === 'cash') {
+
+                Mail::to($order->email)->send(new OrderPlacedMail($order->load('items')));
 
                 return redirect()
                     ->route('checkout.success', $order);
@@ -222,7 +229,10 @@ class CheckoutController extends Controller
     }
 
     /**
-     * Plata finalizată.
+     * Revenirea din Checkout.
+     *
+     * Redirectul browserului nu este o confirmare de plată. Webhook-ul Stripe
+     * este singura sursă de adevăr pentru plata cu cardul.
      */
     public function success(Order $order, CartService $cart)
     {
@@ -230,23 +240,73 @@ class CheckoutController extends Controller
             abort(403);
         }
 
-        $cart->clear();
+        if ($order->payment_method === 'cash') {
+            $cart->clear();
+
+            return redirect()
+                ->route('home')
+                ->with(
+                    'success',
+                    'Comanda a fost înregistrată cu succes!'
+                );
+        }
+
+        if ($order->payment_status === 'paid') {
+            $cart->clear();
+
+            return redirect()
+                ->route('home')
+                ->with(
+                    'success',
+                    'Plata a fost confirmată, iar comanda ta este în procesare.'
+                );
+        }
+
+        if ($order->payment_status === 'pending') {
+            return redirect()
+                ->route('my-orders.show', $order)
+                ->with(
+                    'info',
+                    'Plata este în curs de confirmare. Vei vedea starea actualizată a comenzii în câteva momente.'
+                );
+        }
 
         return redirect()
-            ->route('home')
+            ->route('checkout.index')
             ->with(
-                'success',
-                'Comanda a fost înregistrată cu succes!'
+                'error',
+                'Plata nu a putut fi confirmată. Te rugăm să încerci din nou.'
             );
     }
 
     /**
-     * Plata anulată.
+     * Stripe revine prin GET; navigarea nu poate anula o comandă.
      */
     public function cancel(Order $order)
     {
         if ($order->user_id !== auth()->id()) {
             abort(403);
+        }
+
+        return redirect()->route('my-orders.show', $order)->with(
+            'info',
+            'Plata nu a fost confirmată. Poți anula comanda din pagina ei; până atunci stocul rămâne rezervat.'
+        );
+    }
+
+    public function cancelOrder(Order $order)
+    {
+        if ($order->user_id !== auth()->id()) {
+            abort(403);
+        }
+
+        $order->refresh();
+
+        if ($order->payment_method !== 'stripe' || $order->payment_status === 'paid') {
+            return redirect()->route('my-orders.show', $order)->with(
+                'info',
+                'Comanda nu mai poate fi anulată din acest formular.'
+            );
         }
 
         $this->orderService->markAsFailed($order);

@@ -13,6 +13,13 @@ class ReviewController extends Controller
      */
     public function store(Request $request, Product $product)
     {
+        $verifiedPurchase = $request->user()->orders()
+            ->whereIn('status', ['paid', 'processing', 'shipped', 'delivered'])
+            ->whereHas('items', fn ($query) => $query->where('product_id', $product->id))
+            ->exists();
+
+        abort_unless($verifiedPurchase, 403, 'Recenziile pot fi publicate numai pentru produse cumpărate de la Novelion.');
+
         $request->validate([
             'rating' => ['required', 'integer', 'min:1', 'max:5'],
             'comment' => ['required', 'string', 'min:10'],
@@ -26,6 +33,7 @@ class ReviewController extends Controller
                 'rating' => $request->rating,
                 'comment' => $request->comment,
                 'is_approved' => false,
+                'is_verified_purchase' => true,
             ]);
 
             return back()->with(

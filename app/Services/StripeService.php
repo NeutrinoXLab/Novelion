@@ -83,7 +83,7 @@ class StripeService
             'success_url' => route(
                 'checkout.success',
                 ['order' => $order->id]
-            ),
+            ).'?session_id={CHECKOUT_SESSION_ID}',
 
             'cancel_url' => route(
                 'checkout.cancel',
@@ -107,6 +107,9 @@ class StripeService
      */
     public function refundPayment(Order $order): Refund
     {
+        if ($order->payment_method !== 'stripe') {
+            throw new \RuntimeException('Numai comenzile plătite prin Stripe pot fi rambursate prin Stripe.');
+        }
         Stripe::setApiKey(config('services.stripe.secret'));
 
         if (! $order->stripe_payment_intent) {
@@ -115,20 +118,34 @@ class StripeService
             );
         }
 
-        if ($order->payment_status === 'refunded') {
+        if ($order->payment_status === 'refunded' || $order->stripe_refund_id) {
             throw new \RuntimeException(
                 'Plata acestei comenzi a fost deja rambursată.'
             );
         }
 
-        $refund = Refund::create([
-            'payment_intent' => $order->stripe_payment_intent,
-        ]);
+        if ($order->returnRequests()->whereNotIn('status', ['rejected'])->exists()) {
+            throw new \RuntimeException(
+                'Comanda are un retur activ sau rambursat.'
+            );
+        }
+
+        $refund = Refund::create(
+            ['payment_intent' => $order->stripe_payment_intent,
+                'metadata' => ['order_id' => (string) $order->id]],
+            ['idempotency_key' => 'order-refund-'.$order->id]
+        );
 
         $order->update([
-            'payment_status' => 'refunded',
-            'status' => 'cancelled',
+            'stripe_refund_id' => $refund->id,
+            'refund_status' => ($refund->status ?? null) === 'succeeded' ? 'completed' : 'processing',
+            'refunded_at' => ($refund->status ?? null) === 'succeeded' ? now() : null,
         ]);
+
+        if (($refund->status ?? null) === 'succeeded') {
+            $order->update(['payment_status' => 'refunded', 'status' => 'cancelled']);
+            app(OrderService::class)->restoreStock($order);
+        }
 
         return $refund;
     }
@@ -143,6 +160,10 @@ class StripeService
         $return->loadMissing('order');
 
         $order = $return->order;
+
+        if ($order->payment_method !== 'stripe') {
+            throw new \RuntimeException('Comanda ramburs se restituie prin transfer bancar, nu prin Stripe.');
+        }
 
         if ($return->status !== 'received') {
             throw new \RuntimeException(
@@ -172,16 +193,14 @@ class StripeService
             );
         }
 
-        /*
-         * Cerem refund-ul integral pentru Payment Intent.
-         *
-         * Atașăm ID-ul returului în metadata Stripe pentru ca webhook-ul
-         * charge.refunded să poată identifica faptul că este un refund
-         * pentru retur și să nu restaureze stocul încă o dată.
-         */
+        if (! $return->refund_amount || (float) $return->refund_amount <= 0) {
+            throw new \RuntimeException('Returul nu are o sumă validă de rambursat.');
+        }
+
         $refund = Refund::create(
             [
                 'payment_intent' => $order->stripe_payment_intent,
+                'amount' => (int) round((float) $return->refund_amount * 100),
 
                 'metadata' => [
                     'return_request_id' => (string) $return->id,
@@ -189,18 +208,23 @@ class StripeService
                 ],
             ],
             [
-                'idempotency_key' => 'return-refund-' . $return->id,
+                'idempotency_key' => 'return-refund-'.$return->id,
             ]
         );
 
         /*
-         * Salvăm imediat ID-ul Stripe și momentul rambursării.
+         * Cererea creată nu înseamnă că procesatorul a finalizat refund-ul.
          */
         $return->update([
             'stripe_refund_id' => $refund->id,
-            'refunded_at' => now(),
-            'status' => 'refunded',
+            'refund_status' => in_array($refund->status ?? null, ['succeeded'], true) ? 'completed' : 'processing',
+            'status' => ($refund->status ?? null) === 'succeeded' ? 'refunded' : 'received',
+            'refunded_at' => ($refund->status ?? null) === 'succeeded' ? now() : null,
         ]);
+
+        if (($refund->status ?? null) === 'succeeded') {
+            $return->restoreStock();
+        }
 
         return $refund;
     }

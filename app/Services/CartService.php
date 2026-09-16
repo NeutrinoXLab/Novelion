@@ -22,6 +22,7 @@ class CartService
 
             if (! $product || ! $product->is_active) {
                 unset($cart[$key]);
+
                 continue;
             }
 
@@ -35,8 +36,9 @@ class CartService
              * Greutatea totală a acestui produs
              * în funcție de cantitatea comandată.
              */
-            $item['total_weight'] =
-                ($product->weight ?? 0) * $item['quantity'];
+            $item['total_weight'] = $product->weight === null
+                ? null
+                : (float) $product->weight * $item['quantity'];
 
             /*
              * Volumul unei bucăți:
@@ -150,6 +152,16 @@ class CartService
             ->sum('total_weight');
     }
 
+    public function hasMissingWeight(): bool
+    {
+        return collect($this->getCart())->contains(fn ($item) => $item['total_weight'] === null || $item['total_weight'] <= 0);
+    }
+
+    public function canShip(): bool
+    {
+        return ! $this->hasMissingWeight() && $this->shippingRate() !== null;
+    }
+
     /**
      * Volumul total al comenzii.
      */
@@ -167,6 +179,9 @@ class CartService
      */
     public function shippingRate(): ?ShippingRate
     {
+        if ($this->hasMissingWeight()) {
+            return null;
+        }
         $weight = $this->totalWeight();
         $volume = $this->totalVolume();
 

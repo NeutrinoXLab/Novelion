@@ -5,6 +5,7 @@ namespace App\Filament\Resources\ReturnRequests\Pages;
 use App\Filament\Resources\ReturnRequests\ReturnRequestResource;
 use App\Services\StripeService;
 use Filament\Actions\Action;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 
@@ -60,13 +61,13 @@ class EditReturnRequest extends EditRecord
                 ->label('Rambursează returul')
                 ->icon('heroicon-o-arrow-uturn-left')
                 ->color('danger')
-                ->visible(fn () => $this->record->status === 'received')
+                ->visible(fn () => $this->record->status === 'received' && $this->record->order->payment_method === 'stripe' && ! $this->record->stripe_refund_id)
                 ->requiresConfirmation()
                 ->modalHeading('Rambursare retur')
                 ->modalDescription(
-                    fn () => 'Ești sigur că vrei să rambursezi integral comanda '
-                        . $this->record->order->order_number
-                        . ' prin Stripe?'
+                    fn () => 'Inițiezi rambursarea sumei de '.$this->record->refund_amount.' RON pentru returul din comanda '
+                        .$this->record->order->order_number
+                        .' prin Stripe?'
                 )
                 ->modalSubmitActionLabel('Da, rambursează')
                 ->action(function () {
@@ -103,26 +104,18 @@ class EditReturnRequest extends EditRecord
                             ->refundReturn($this->record);
 
                         /*
-                         * 2. După confirmarea refund-ului Stripe,
-                         * restaurăm stocul.
-                         *
-                         * Metoda este idempotentă.
-                         */
-                        $this->record->restoreStock();
-
-                        /*
                          * Reîncărcăm returul pentru a avea datele actualizate.
                          */
                         $this->record->refresh();
 
                         Notification::make()
-                            ->title('Returul a fost rambursat.')
+                            ->title('Rambursarea a fost inițiată.')
                             ->body(
                                 'Plata pentru comanda '
-                                . $this->record->order->order_number
-                                . ' a fost rambursată prin Stripe.'
-                                . ' ID refund: '
-                                . $refund->id
+                                .$this->record->order->order_number
+                                .' este urmărită până la confirmarea Stripe.'
+                                .' ID refund: '
+                                .$refund->id
                             )
                             ->success()
                             ->send();
@@ -136,6 +129,24 @@ class EditReturnRequest extends EditRecord
                             ->danger()
                             ->send();
                     }
+                }),
+            Action::make('bankRefund')
+                ->label('Evidență transfer bancar')
+                ->visible(fn () => $this->record->status === 'received' && $this->record->refund_method === 'bank_transfer' && $this->record->bank_transfer_accepted_at !== null)
+                ->form([TextInput::make('refund_status')->label('Stare transfer')->required()->datalist(['initiated', 'processing', 'completed', 'failed'])])
+                ->action(function (array $data) {
+                    if (! in_array($data['refund_status'], ['initiated', 'processing', 'completed', 'failed'], true)) {
+                        throw new \RuntimeException('Stare invalidă.');
+                    }
+                    $this->record->update([
+                        'refund_status' => $data['refund_status'],
+                        'status' => $data['refund_status'] === 'completed' ? 'refunded' : 'received',
+                        'refunded_at' => $data['refund_status'] === 'completed' ? now() : null,
+                    ]);
+                    if ($data['refund_status'] === 'completed') {
+                        $this->record->restoreStock();
+                    }
+                    Notification::make()->title('Starea transferului a fost înregistrată.')->success()->send();
                 }),
         ];
     }

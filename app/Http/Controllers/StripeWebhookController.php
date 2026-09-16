@@ -7,8 +7,11 @@ use App\Models\Order;
 use App\Models\ReturnRequest;
 use App\Services\OrderService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Stripe\Exception\SignatureVerificationException;
+use Stripe\Refund;
+use Stripe\Stripe;
 use Stripe\Webhook;
 
 class StripeWebhookController extends Controller
@@ -43,34 +46,62 @@ class StripeWebhookController extends Controller
         }
 
         /*
-         * Plata finalizată prin Stripe Checkout.
+         * Plata finalizată prin Stripe Checkout. Pentru metodele de plată
+         * asincrone, confirmarea vine ulterior prin
+         * checkout.session.async_payment_succeeded.
          */
-        if ($event->type === 'checkout.session.completed') {
+        if (in_array($event->type, [
+            'checkout.session.completed',
+            'checkout.session.async_payment_succeeded',
+        ], true)) {
             $session = $event->data->object;
 
-            $orderId = $session->metadata->order_id ?? null;
+            $order = $this->findOrderForCheckoutSession($session);
 
-            $order = $orderId
-                ? Order::find($orderId)
-                : Order::where(
-                    'stripe_session_id',
-                    $session->id
-                )->first();
+            if (($session->payment_status ?? null) === 'paid'
+                && (! $order || ! $this->matchesPaidCheckout($order, $session))) {
+                report(new \RuntimeException(
+                    'Stripe paid Checkout session did not match a Novelion order: '.($session->id ?? 'unknown')
+                ));
+            }
 
-            if ($order) {
-                $order->update([
-                    'stripe_session_id' => $session->id,
-                    'stripe_payment_intent' => $session->payment_intent,
-                ]);
+            if ($order && $this->matchesPaidCheckout($order, $session)) {
+                $paidOrder = DB::transaction(function () use ($order, $session): ?Order {
+                    $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
 
-                $wasAlreadyPaid =
-                    $order->payment_status === 'paid';
+                    if (! $this->matchesPaidCheckout($order, $session)) {
+                        return null;
+                    }
 
-                $this->orderService->markAsPaid($order);
+                    if ($order->status === 'cancelled') {
+                        if ($order->payment_status === 'refunded') {
+                            return null;
+                        }
 
-                if (! $wasAlreadyPaid) {
-                    Mail::to($order->email)
-                        ->send(new OrderPaidMail($order));
+                        if ($order->late_stripe_payment_at === null) {
+                            $order->update([
+                                'stripe_payment_intent' => $session->payment_intent,
+                                'late_stripe_payment_at' => now(),
+                            ]);
+                            report(new \RuntimeException(
+                                'Stripe confirmed payment for cancelled order '.$order->id
+                            ));
+                        }
+
+                        return null;
+                    }
+
+                    if ($order->payment_status === 'paid') {
+                        return null;
+                    }
+
+                    $order->update(['stripe_payment_intent' => $session->payment_intent]);
+
+                    return $this->orderService->markAsPaid($order) ? $order : null;
+                });
+
+                if ($paidOrder) {
+                    Mail::to($paidOrder->email)->send(new OrderPaidMail($paidOrder));
                 }
             }
         }
@@ -83,14 +114,7 @@ class StripeWebhookController extends Controller
         if ($event->type === 'checkout.session.expired') {
             $session = $event->data->object;
 
-            $orderId = $session->metadata->order_id ?? null;
-
-            $order = $orderId
-                ? Order::find($orderId)
-                : Order::where(
-                    'stripe_session_id',
-                    $session->id
-                )->first();
+            $order = $this->findOrderForCheckoutSession($session);
 
             if ($order) {
                 if (! $order->stripe_session_id) {
@@ -109,6 +133,71 @@ class StripeWebhookController extends Controller
         }
 
         /*
+         * O metodă de plată asincronă poate eșua după ce sesiunea Checkout a
+         * fost deja finalizată. Eliberăm stocul rezervat, dar numai dacă plata
+         * nu a fost confirmată între timp.
+         */
+        if ($event->type === 'checkout.session.async_payment_failed') {
+            $session = $event->data->object;
+            $order = $this->findOrderForCheckoutSession($session);
+
+            if ($order) {
+                $this->orderService->markAsFailed($order);
+            }
+        }
+
+        if (in_array($event->type, ['refund.updated', 'refund.failed'], true)) {
+            $refund = $event->data->object;
+            $returnId = $refund->metadata->return_request_id ?? null;
+            $orderId = $refund->metadata->order_id ?? null;
+            if ($returnId && $orderId) {
+                $return = ReturnRequest::query()->whereKey((int) $returnId)->where('order_id', (int) $orderId)->first();
+                if ($return && $return->order->payment_method === 'stripe'
+                    && $return->order->stripe_payment_intent === ($refund->payment_intent ?? null)
+                    && (! $return->stripe_refund_id || $return->stripe_refund_id === ($refund->id ?? null))
+                    && ($refund->currency ?? null) === 'ron'
+                    && (int) ($refund->amount ?? -1) === (int) round((float) $return->refund_amount * 100)) {
+                    if ($return->refund_status === 'completed') {
+                        return response()->json(['received' => true]);
+                    }
+                    $failed = $event->type === 'refund.failed' || in_array($refund->status ?? null, ['failed', 'canceled'], true);
+                    $completed = ($refund->status ?? null) === 'succeeded';
+                    $return->update([
+                        'stripe_refund_id' => $return->stripe_refund_id ?: $refund->id,
+                        'refund_status' => $failed ? 'failed' : ($completed ? 'completed' : 'processing'),
+                        'status' => $completed ? 'refunded' : $return->status,
+                        'refunded_at' => $completed ? ($return->refunded_at ?? now()) : $return->refunded_at,
+                    ]);
+                    if ($completed) {
+                        $return->restoreStock();
+                    }
+                }
+            } elseif ($orderId) {
+                $order = Order::query()->whereKey((int) $orderId)->where('payment_method', 'stripe')->first();
+                if ($order && $order->stripe_payment_intent === ($refund->payment_intent ?? null)
+                    && (! $order->stripe_refund_id || $order->stripe_refund_id === ($refund->id ?? null))
+                    && ($refund->currency ?? null) === 'ron'
+                    && (int) ($refund->amount ?? -1) === (int) round((float) $order->total * 100)) {
+                    if ($order->refund_status === 'completed') {
+                        return response()->json(['received' => true]);
+                    }
+                    $failed = $event->type === 'refund.failed' || in_array($refund->status ?? null, ['failed', 'canceled'], true);
+                    $completed = ($refund->status ?? null) === 'succeeded';
+                    $order->update([
+                        'stripe_refund_id' => $order->stripe_refund_id ?: $refund->id,
+                        'refund_status' => $failed ? 'failed' : ($completed ? 'completed' : 'processing'),
+                        'refunded_at' => $completed ? now() : null,
+                        'payment_status' => $completed ? 'refunded' : $order->payment_status,
+                        'status' => $completed ? 'cancelled' : $order->status,
+                    ]);
+                    if ($completed) {
+                        $this->orderService->restoreStock($order);
+                    }
+                }
+            }
+        }
+
+        /*
          * Refund procesat prin Stripe.
          *
          * IMPORTANT:
@@ -121,16 +210,52 @@ class StripeWebhookController extends Controller
         if ($event->type === 'charge.refunded') {
             $charge = $event->data->object;
 
+            /*
+             * charge.refunded este emis și pentru refund-uri parțiale. Nu
+             * anulăm o comandă și nu restaurăm întregul stoc până când Charge
+             * nu este rambursat integral.
+             */
+            if (
+                (int) ($charge->amount_refunded ?? 0) <
+                (int) ($charge->amount ?? 0)
+            ) {
+                return response()->json([
+                    'received' => true,
+                ]);
+            }
+
             $paymentIntent = $charge->payment_intent ?? null;
 
             if ($paymentIntent) {
-                $order = Order::where(
-                    'stripe_payment_intent',
-                    $paymentIntent
-                )->first();
+                $matchingOrders = Order::query()
+                    ->where('stripe_payment_intent', $paymentIntent)
+                    ->limit(2)
+                    ->get();
+
+                if ($matchingOrders->count() > 1) {
+                    report(new \RuntimeException(
+                        'Stripe PaymentIntent belongs to multiple Novelion orders: '.$paymentIntent
+                    ));
+
+                    return response()->json(['received' => true]);
+                }
+
+                $order = $matchingOrders->first();
 
                 if ($order) {
-                    \Stripe\Stripe::setApiKey(
+                    if (
+                        ($charge->currency ?? null) !== 'ron'
+                        || ! is_int($charge->amount ?? null)
+                        || $charge->amount !== (int) round((float) $order->total * 100)
+                    ) {
+                        report(new \RuntimeException(
+                            'Stripe refund amount or currency mismatch for order '.$order->id
+                        ));
+
+                        return response()->json(['received' => true]);
+                    }
+
+                    Stripe::setApiKey(
                         config('services.stripe.secret')
                     );
 
@@ -139,7 +264,7 @@ class StripeWebhookController extends Controller
                      * refund-urile asociate acestui Charge.
                      */
                     try {
-                        $refunds = \Stripe\Refund::all([
+                        $refunds = Refund::all([
                             'charge' => $charge->id,
                         ]);
                     } catch (\Throwable $e) {
@@ -153,13 +278,13 @@ class StripeWebhookController extends Controller
                         report($e);
 
                         return response()->json([
-                            'message' =>
-                                'Refund could not be classified.',
+                            'message' => 'Refund could not be classified.',
                         ], 500);
                     }
 
                     $returnRequestId = null;
                     $stripeRefundId = null;
+                    $metadataOrderId = null;
 
                     foreach ($refunds->data as $refund) {
                         $metadataReturnRequestId =
@@ -172,6 +297,7 @@ class StripeWebhookController extends Controller
 
                             $stripeRefundId =
                                 $refund->id ?? null;
+                            $metadataOrderId = $refund->metadata->order_id ?? null;
 
                             break;
                         }
@@ -190,11 +316,10 @@ class StripeWebhookController extends Controller
                      * În acest caz:
                      *
                      * - actualizăm returul;
-                     * - NU restaurăm stocul aici;
+                     * - restaurăm stocul idempotent;
                      * - NU anulăm comanda.
                      *
-                     * Stocul a fost deja restaurat de
-                     * EditReturnRequest.
+                     * Webhook-ul poate sosi înaintea acțiunii Filament.
                      */
                     if ($returnRequestId) {
                         $returnRequest = ReturnRequest::find(
@@ -202,13 +327,23 @@ class StripeWebhookController extends Controller
                         );
 
                         if ($returnRequest) {
+                            if (
+                                $returnRequest->order_id !== $order->id
+                                || $metadataOrderId !== (string) $order->id
+                            ) {
+                                report(new \RuntimeException(
+                                    'Stripe return refund metadata mismatch for order '.$order->id
+                                ));
+
+                                return response()->json(['received' => true]);
+                            }
+
                             $returnRequest->update([
                                 'status' => 'refunded',
-                                'stripe_refund_id' =>
-                                    $returnRequest->stripe_refund_id
+                                'refund_status' => 'completed',
+                                'stripe_refund_id' => $returnRequest->stripe_refund_id
                                     ?? $stripeRefundId,
-                                'refunded_at' =>
-                                    $returnRequest->refunded_at
+                                'refunded_at' => $returnRequest->refunded_at
                                     ?? now(),
                             ]);
 
@@ -218,7 +353,10 @@ class StripeWebhookController extends Controller
                              */
                             $order->update([
                                 'payment_status' => 'refunded',
+                                'refund_status' => 'completed',
                             ]);
+
+                            $returnRequest->restoreStock();
                         } else {
                             /*
                              * Refund-ul Stripe indică un retur care
@@ -230,29 +368,29 @@ class StripeWebhookController extends Controller
                              */
                             report(new \RuntimeException(
                                 'Stripe refund references a missing return request: '
-                                . $returnRequestId
+                                .$returnRequestId
                             ));
 
                             return response()->json([
-                                'message' =>
-                                    'Return request could not be found.',
+                                'message' => 'Return request could not be found.',
                             ], 500);
                         }
 
-                    /*
-                     * ==========================================
-                     * CAZ 2: Refund normal al unei comenzi
-                     * ==========================================
-                     *
-                     * Nu există metadata return_request_id.
-                     *
-                     * Acesta este un refund administrativ/normal,
-                     * deci comanda este anulată și stocul este
-                     * restaurat prin OrderService.
-                     */
+                        /*
+                         * ==========================================
+                         * CAZ 2: Refund normal al unei comenzi
+                         * ==========================================
+                         *
+                         * Nu există metadata return_request_id.
+                         *
+                         * Acesta este un refund administrativ/normal,
+                         * deci comanda este anulată și stocul este
+                         * restaurat prin OrderService.
+                         */
                     } else {
                         $order->update([
                             'payment_status' => 'refunded',
+                            'refund_status' => 'completed',
                             'status' => 'cancelled',
                         ]);
 
@@ -265,5 +403,51 @@ class StripeWebhookController extends Controller
         return response()->json([
             'received' => true,
         ]);
+    }
+
+    /**
+     * Găsește numai comenzile create pentru plata Stripe.
+     */
+    private function findOrderForCheckoutSession(object $session): ?Order
+    {
+        $orderId = $session->metadata->order_id ?? null;
+        $sessionId = $session->id ?? null;
+
+        if (! ctype_digit((string) $orderId) || ! is_string($sessionId)) {
+            return null;
+        }
+
+        return Order::query()
+            ->whereKey((int) $orderId)
+            ->where('payment_method', 'stripe')
+            ->where('stripe_session_id', $sessionId)
+            ->first();
+    }
+
+    private function matchesPaidCheckout(Order $order, object $session): bool
+    {
+        if (
+            $order->stripe_session_id !== ($session->id ?? null)
+            || ($session->payment_status ?? null) !== 'paid'
+            || ($session->currency ?? null) !== 'ron'
+            || ! is_string($session->payment_intent ?? null)
+            || $session->payment_intent === ''
+            || ($order->stripe_payment_intent !== null
+                && $order->stripe_payment_intent !== $session->payment_intent)
+            || Order::query()
+                ->where('stripe_payment_intent', $session->payment_intent)
+                ->whereKeyNot($order->id)
+                ->exists()
+        ) {
+            return false;
+        }
+
+        $expectedCents = $order->items->sum(
+            fn ($item): int => (int) round((float) $item->price * 100) * $item->quantity
+        ) + (int) round((float) $order->shipping_cost * 100);
+
+        return $expectedCents === (int) round((float) $order->total * 100)
+            && is_int($session->amount_total ?? null)
+            && $session->amount_total === $expectedCents;
     }
 }

@@ -6,7 +6,9 @@ use App\Filament\Resources\Orders\OrderResource;
 use App\Services\OrderService;
 use App\Services\StripeService;
 use Filament\Actions\ViewAction;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
+use Filament\Support\Exceptions\Halt;
 
 class EditOrder extends EditRecord
 {
@@ -35,6 +37,10 @@ class EditOrder extends EditRecord
             ) {
                 app(StripeService::class)
                     ->refundPayment($this->record);
+                if ($this->record->fresh()->refund_status !== 'completed') {
+                    Notification::make()->title('Rambursarea a fost inițiată. Anularea se finalizează după confirmarea Stripe.')->warning()->send();
+                    throw new Halt;
+                }
             }
 
             app(OrderService::class)->cancel($this->record);
@@ -47,5 +53,18 @@ class EditOrder extends EditRecord
         ) {
             $this->record->delivered_at = now();
         }
+    }
+
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        // Aceste câmpuri reflectă plata reală și nu trebuie rescrise de
+        // un formular deschis înainte de refund sau webhook.
+        unset($data['payment_method']);
+
+        if ($this->record->payment_method === 'stripe') {
+            unset($data['payment_status']);
+        }
+
+        return $data;
     }
 }

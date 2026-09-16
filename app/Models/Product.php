@@ -4,9 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Product extends Model
 {
@@ -37,6 +37,15 @@ class Product extends Model
         'is_featured',
         'is_new',
         'is_on_sale',
+        'manufacturer_name',
+        'manufacturer_contact',
+        'model_identifier',
+        'eu_responsible_person_name',
+        'eu_responsible_person_contact',
+        'warnings',
+        'safety_instructions',
+        'commercial_warranty',
+        'requires_eu_responsible_person',
         'seo_title',
         'seo_description',
     ];
@@ -56,7 +65,49 @@ class Product extends Model
         'is_featured' => 'boolean',
         'is_new' => 'boolean',
         'is_on_sale' => 'boolean',
+        'requires_eu_responsible_person' => 'boolean',
     ];
+
+    protected static function booted(): void
+    {
+        static::created(function (Product $product): void {
+            $product->priceHistory()->create(['price' => $product->sale_price ?: $product->selling_price, 'effective_at' => $product->created_at ?? now()]);
+        });
+
+        static::updated(function (Product $product): void {
+            if ($product->wasChanged(['selling_price', 'sale_price'])) {
+                $previousPrice = $product->getOriginal('sale_price') ?: $product->getOriginal('selling_price');
+                $currentPrice = $product->sale_price ?: $product->selling_price;
+                if ((float) $previousPrice !== (float) $currentPrice) {
+                    $product->priceHistory()->create(['price' => $currentPrice, 'effective_at' => now()]);
+                }
+            }
+        });
+    }
+
+    public function priceHistory(): HasMany
+    {
+        return $this->hasMany(ProductPriceHistory::class);
+    }
+
+    public function referencePrice(): ?float
+    {
+        if (! $this->sale_price) {
+            return null;
+        }
+        $latest = $this->priceHistory()->latest('id')->first();
+        if (! $latest || (float) $latest->price !== (float) $this->sale_price) {
+            return null;
+        }
+        $start = $latest->effective_at->copy()->subDays(30);
+        $prices = $this->priceHistory()->where('id', '<', $latest->id)->where('effective_at', '>=', $start)->pluck('price');
+        $previous = $this->priceHistory()->where('id', '<', $latest->id)->where('effective_at', '<', $start)->latest('effective_at')->first();
+        if ($previous) {
+            $prices->push($previous->price);
+        }
+
+        return $prices->isEmpty() ? null : (float) $prices->min();
+    }
 
     /**
      * Categoria produsului.

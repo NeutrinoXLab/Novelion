@@ -3,8 +3,8 @@
 namespace App\Filament\Resources\Products\Schemas;
 
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -80,11 +80,8 @@ class ProductForm
                             ->numeric()
                             ->prefix('Lei'),
 
-                        TextInput::make('vat_rate')
-                            ->label('TVA (%)')
-                            ->required()
-                            ->numeric()
-                            ->default(19),
+                        TextInput::make('vat_rate')->label('TVA (%)')->numeric()->default(0)
+                            ->helperText('Novelion este în prezent neplătitoare de TVA.'),
 
                     ])
                     ->columns(2),
@@ -108,7 +105,8 @@ class ProductForm
                         TextInput::make('weight')
                             ->label('Greutate (kg)')
                             ->numeric()
-                            ->minValue(0)
+                            ->minValue(0.01)
+                            ->required(fn ($get) => (bool) $get('is_active'))
                             ->step(0.01)
                             ->suffix('kg'),
 
@@ -149,6 +147,20 @@ class ProductForm
 
                     ]),
 
+                Section::make('Siguranță, identificare și garanție comercială')
+                    ->description('Completează numai informații reale. Garanția comercială a producătorului este separată de garanția legală.')
+                    ->schema([
+                        TextInput::make('manufacturer_name')->label('Producător')->required(fn ($get) => (bool) $get('is_active')),
+                        Textarea::make('manufacturer_contact')->label('Contact producător')->required(fn ($get) => (bool) $get('is_active')),
+                        TextInput::make('model_identifier')->label('Marcă/model/identificare')->required(fn ($get) => (bool) $get('is_active')),
+                        Toggle::make('requires_eu_responsible_person')->label('Necesită persoană responsabilă în UE')->live(),
+                        TextInput::make('eu_responsible_person_name')->label('Persoană responsabilă în UE')->required(fn ($get) => (bool) $get('is_active') && (bool) $get('requires_eu_responsible_person')),
+                        Textarea::make('eu_responsible_person_contact')->label('Contact persoană responsabilă')->required(fn ($get) => (bool) $get('is_active') && (bool) $get('requires_eu_responsible_person')),
+                        Textarea::make('warnings')->label('Avertismente'),
+                        Textarea::make('safety_instructions')->label('Informații/instrucțiuni de siguranță'),
+                        Textarea::make('commercial_warranty')->label('Garanție comercială a producătorului (dacă există)'),
+                    ])->columns(2),
+
                 Section::make('⚙️ SEO')
                     ->schema([
 
@@ -166,7 +178,7 @@ class ProductForm
 
                         Toggle::make('is_active')
                             ->label('Activ')
-                            ->default(true),
+                            ->default(false),
 
                         Toggle::make('is_featured')
                             ->label('Recomandat')

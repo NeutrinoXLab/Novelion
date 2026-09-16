@@ -2,10 +2,10 @@
 
 namespace App\Filament\Resources\Orders\Schemas;
 
-use Filament\Schemas\Components\Section;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 
 class OrderForm
@@ -39,7 +39,9 @@ class OrderForm
                                 'pending' => 'În așteptare',
                                 'paid' => 'Plătită',
                                 'failed' => 'Eșuată',
+                                'refunded' => 'Rambursată',
                             ])
+                            ->disabled(fn ($record) => $record?->payment_method === 'stripe')
                             ->required(),
 
                         Select::make('payment_method')
@@ -48,6 +50,7 @@ class OrderForm
                                 'cash' => 'Ramburs',
                                 'stripe' => 'Card bancar',
                             ])
+                            ->disabled(fn ($record) => $record !== null)
                             ->required(),
 
                     ])

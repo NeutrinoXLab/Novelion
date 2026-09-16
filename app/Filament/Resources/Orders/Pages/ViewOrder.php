@@ -25,7 +25,7 @@ class ViewOrder extends ViewRecord
                 ->icon('heroicon-o-arrow-uturn-left')
                 ->color('danger')
                 ->visible(function () {
-                    if ($this->record->payment_status !== 'paid') {
+                    if ($this->record->payment_status !== 'paid' || $this->record->payment_method !== 'stripe' || $this->record->stripe_refund_id) {
                         return false;
                     }
 
@@ -42,15 +42,15 @@ class ViewOrder extends ViewRecord
                 ->modalHeading('Rambursare plată')
                 ->modalDescription(
                     fn () => 'Ești sigur că vrei să rambursezi suma totală de '
-                        . number_format(
+                        .number_format(
                             (float) $this->record->total,
                             2,
                             ',',
                             '.'
                         )
-                        . ' lei pentru comanda '
-                        . $this->record->order_number
-                        . '?'
+                        .' lei pentru comanda '
+                        .$this->record->order_number
+                        .'?'
                 )
                 ->modalSubmitActionLabel('Da, rambursează')
                 ->action(function () {
@@ -77,16 +77,16 @@ class ViewOrder extends ViewRecord
                             ->refundPayment($this->record);
 
                         Notification::make()
-                            ->title('Plata a fost rambursată.')
+                            ->title('Cererea de rambursare a fost înregistrată.')
                             ->body(
                                 'Suma totală de '
-                                . number_format(
+                                .number_format(
                                     (float) $this->record->total,
                                     2,
                                     ',',
                                     '.'
                                 )
-                                . ' lei a fost rambursată prin Stripe.'
+                                .' lei este urmărită până la confirmarea Stripe.'
                             )
                             ->success()
                             ->send();
@@ -120,7 +120,7 @@ class ViewOrder extends ViewRecord
                         ->title('Postis încă nu este configurat.')
                         ->body(
                             'În etapa următoare vom conecta API-ul '
-                            . 'și AWB-ul se va genera automat.'
+                            .'și AWB-ul se va genera automat.'
                         )
                         ->info()
                         ->send();
@@ -138,11 +138,11 @@ class ViewOrder extends ViewRecord
 
                     return response()->streamDownload(
 
-                        fn () => print($pdf->output()),
+                        fn () => print ($pdf->output()),
 
                         'Factura-'
-                        . $this->record->order_number
-                        . '.pdf'
+                        .$this->record->order_number
+                        .'.pdf'
 
                     );
 

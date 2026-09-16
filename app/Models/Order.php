@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Mail\OrderCancelledMail;
 use App\Mail\OrderDeliveredMail;
 use App\Mail\OrderShippedMail;
+use App\Mail\RefundStatusMail;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Mail;
@@ -87,6 +88,10 @@ class Order extends Model
 
         'stripe_session_id',
         'stripe_payment_intent',
+        'late_stripe_payment_at',
+        'stripe_refund_id',
+        'refund_status',
+        'refunded_at',
 
         /*
         |--------------------------------------------------------------------------
@@ -102,6 +107,8 @@ class Order extends Model
 
     protected $casts = [
         'delivered_at' => 'datetime',
+        'late_stripe_payment_at' => 'datetime',
+        'refunded_at' => 'datetime',
     ];
 
     /**
@@ -110,6 +117,10 @@ class Order extends Model
     protected static function booted(): void
     {
         static::updated(function (Order $order) {
+
+            if ($order->wasChanged('refund_status') && $order->refund_status) {
+                Mail::to($order->email)->send(new RefundStatusMail($order, $order->refund_status, $order->total));
+            }
 
             if (! $order->wasChanged('status')) {
                 return;

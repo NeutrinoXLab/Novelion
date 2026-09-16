@@ -16,6 +16,10 @@ class OrderService
      */
     public function create(array $data, CartService $cart): Order
     {
+        if (! $cart->canShip()) {
+            throw new \RuntimeException('Nu există o regulă validă de transport pentru coș.');
+        }
+
         return DB::transaction(function () use ($data, $cart) {
 
             /*
@@ -24,18 +28,34 @@ class OrderService
             |--------------------------------------------------------------------------
             */
 
+            $quantities = [];
+
             foreach ($cart->getCart() as $item) {
+                $productId = $item['product']->id;
+                $quantity = $item['quantity'];
 
-                $product = Product::query()
-                    ->whereKey($item['product']->id)
-                    ->lockForUpdate()
-                    ->firstOrFail();
+                if (! is_int($quantity) || $quantity < 1) {
+                    throw new \RuntimeException('Cantitatea din coș este invalidă.');
+                }
 
-                if ($item['quantity'] > $product->stock_quantity) {
+                $quantities[$productId] = ($quantities[$productId] ?? 0) + $quantity;
+            }
+
+            ksort($quantities);
+            $lockedItems = [];
+
+            foreach ($quantities as $productId => $quantity) {
+                $product = Product::query()->whereKey($productId)
+                    ->lockForUpdate()->firstOrFail();
+
+                if (! $product->is_active || $quantity > $product->stock_quantity) {
                     throw new \Exception(
                         "Produsul {$product->name} nu mai are suficient stoc."
                     );
                 }
+
+                $price = $product->sale_price ?: $product->selling_price;
+                $lockedItems[] = compact('product', 'quantity', 'price');
             }
 
             $isCompany = ($data['customer_type'] ?? 'individual') === 'company';
@@ -46,7 +66,8 @@ class OrderService
             |--------------------------------------------------------------------------
             */
 
-            $subtotal = $cart->subtotal();
+            $subtotal = (float) collect($lockedItems)
+                ->sum(fn (array $item): float => (float) $item['price'] * $item['quantity']);
             $shippingCost = $cart->shippingCost();
             $shippingName = $cart->shippingName();
             $total = $subtotal + $shippingCost;
@@ -63,10 +84,9 @@ class OrderService
 
                 'customer_type' => $data['customer_type'] ?? 'individual',
 
-                'order_number' =>
-                    'NOV-' .
-                    now()->format('Ymd') .
-                    '-' .
+                'order_number' => 'NOV-'.
+                    now()->format('Ymd').
+                    '-'.
                     strtoupper(Str::random(6)),
 
                 /*
@@ -91,23 +111,17 @@ class OrderService
                 |--------------------------------------------------------------------------
                 */
 
-                'company_name' =>
-                    $isCompany ? $data['company_name'] : null,
+                'company_name' => $isCompany ? $data['company_name'] : null,
 
-                'company_vat' =>
-                    $isCompany ? $data['company_vat'] : null,
+                'company_vat' => $isCompany ? $data['company_vat'] : null,
 
-                'company_registration' =>
-                    $isCompany ? $data['company_registration'] : null,
+                'company_registration' => $isCompany ? ($data['company_registration'] ?? null) : null,
 
-                'company_address' =>
-                    $isCompany ? $data['company_address'] : null,
+                'company_address' => $isCompany ? $data['company_address'] : null,
 
-                'company_city' =>
-                    $isCompany ? $data['company_city'] : null,
+                'company_city' => $isCompany ? $data['company_city'] : null,
 
-                'company_county' =>
-                    $isCompany ? $data['company_county'] : null,
+                'company_county' => $isCompany ? $data['company_county'] : null,
 
                 /*
                 |--------------------------------------------------------------------------
@@ -115,26 +129,19 @@ class OrderService
                 |--------------------------------------------------------------------------
                 */
 
-                'shipping_first_name' =>
-                    $data['shipping_first_name'],
+                'shipping_first_name' => $data['shipping_first_name'],
 
-                'shipping_last_name' =>
-                    $data['shipping_last_name'],
+                'shipping_last_name' => $data['shipping_last_name'],
 
-                'shipping_phone' =>
-                    $data['shipping_phone'],
+                'shipping_phone' => $data['shipping_phone'],
 
-                'shipping_county' =>
-                    $data['shipping_county'],
+                'shipping_county' => $data['shipping_county'],
 
-                'shipping_city' =>
-                    $data['shipping_city'],
+                'shipping_city' => $data['shipping_city'],
 
-                'shipping_address' =>
-                    $data['shipping_address'],
+                'shipping_address' => $data['shipping_address'],
 
-                'shipping_postal_code' =>
-                    $data['shipping_postal_code'],
+                'shipping_postal_code' => $data['shipping_postal_code'],
 
                 /*
                 |--------------------------------------------------------------------------
@@ -175,7 +182,7 @@ class OrderService
             |--------------------------------------------------------------------------
             */
 
-            foreach ($cart->getCart() as $item) {
+            foreach ($lockedItems as $item) {
 
                 $item['product']->decrement(
                     'stock_quantity',
@@ -189,11 +196,9 @@ class OrderService
             |--------------------------------------------------------------------------
             */
 
-            foreach ($cart->getCart() as $item) {
+            foreach ($lockedItems as $item) {
 
-                $price =
-                    $item['product']->sale_price
-                    ?: $item['product']->selling_price;
+                $price = $item['price'];
 
                 OrderItem::create([
 
@@ -207,8 +212,7 @@ class OrderService
 
                     'quantity' => $item['quantity'],
 
-                    'total' =>
-                        $price * $item['quantity'],
+                    'total' => $price * $item['quantity'],
 
                 ]);
             }
@@ -220,19 +224,34 @@ class OrderService
     /**
      * Marchează comanda ca plătită.
      */
-    public function markAsPaid(Order $order): void
+    public function markAsPaid(Order $order): bool
     {
-        if (
-            $order->payment_status === 'paid' ||
-            $order->status === 'cancelled'
-        ) {
-            return;
-        }
+        return DB::transaction(function () use ($order) {
+            $order = Order::query()
+                ->whereKey($order->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        $order->update([
-            'payment_status' => 'paid',
-            'status' => 'processing',
-        ]);
+            if ($order->payment_status === 'paid') {
+                return false;
+            }
+
+            /*
+             * Un refund confirmat nu poate fi transformat ulterior într-o
+             * plată reușită de un webhook întârziat.
+             */
+            if ($order->payment_status === 'refunded' || $order->status === 'cancelled') {
+                return false;
+            }
+
+            $order->update([
+                'payment_status' => 'paid',
+                'status' => 'processing',
+                'stock_restored_at' => null,
+            ]);
+
+            return true;
+        });
     }
 
     /**
@@ -291,6 +310,19 @@ class OrderService
     public function markAsFailed(Order $order): void
     {
         DB::transaction(function () use ($order) {
+
+            $order = Order::query()
+                ->whereKey($order->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            /*
+             * Webhook-urile pot ajunge în orice ordine. O expirare sau o
+             * eșuare venită târziu nu trebuie să anuleze o plată confirmată.
+             */
+            if (in_array($order->payment_status, ['paid', 'refunded'], true)) {
+                return;
+            }
 
             $order->update([
                 'payment_status' => 'failed',

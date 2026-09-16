@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\NewsletterConfirmationMail;
 use App\Models\Newsletter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 
@@ -34,19 +36,11 @@ class NewsletterController extends Controller
         if ($newsletter) {
 
             if ($newsletter->unsubscribed_at !== null) {
-
-                $newsletter->update([
-                    'subscribed_at' => now(),
-                    'unsubscribed_at' => null,
-                    'unsubscribe_token' => $newsletter->unsubscribe_token
-                        ?: Str::random(64),
-                ]);
-
                 return redirect()
                     ->back()
                     ->with(
                         'newsletter_success',
-                        'Te-ai abonat din nou cu succes la newsletter-ul Novelion!'
+                        'Această adresă a fost dezabonată. Pentru reactivare, contactează-ne la novelionprime@gmail.com.'
                     );
             }
 
@@ -65,18 +59,36 @@ class NewsletterController extends Controller
                 );
         }
 
-        Newsletter::create([
+        $newsletter = Newsletter::create([
             'email' => $email,
-            'subscribed_at' => now(),
+            'subscribed_at' => null,
+            'confirmation_token' => Str::random(64),
+            'confirmation_sent_at' => now(),
+            'consent_ip' => $request->ip(),
+            'consent_user_agent' => Str::limit((string) $request->userAgent(), 1000, ''),
             'unsubscribe_token' => Str::random(64),
         ]);
+        Mail::to($email)->send(new NewsletterConfirmationMail($newsletter));
 
         return redirect()
             ->back()
             ->with(
                 'newsletter_success',
-                'Te-ai abonat cu succes la newsletter-ul Novelion!'
+                'Verifică emailul și confirmă abonarea accesând linkul primit.'
             );
+    }
+
+    public function confirm(string $token): View
+    {
+        $newsletter = Newsletter::where('confirmation_token', $token)->whereNull('unsubscribed_at')->first();
+        if (! $newsletter) {
+            return view('newsletter.unsubscribe', ['success' => false, 'message' => 'Linkul de confirmare este invalid sau abonarea a fost dezactivată.']);
+        }
+        if (! $newsletter->confirmed_at) {
+            $newsletter->update(['confirmed_at' => now(), 'subscribed_at' => now(), 'confirmation_token' => null]);
+        }
+
+        return view('newsletter.unsubscribe', ['success' => true, 'message' => 'Abonarea la newsletter a fost confirmată.']);
     }
 
     /**
@@ -86,7 +98,7 @@ class NewsletterController extends Controller
     {
         $newsletter = Newsletter::where('unsubscribe_token', $token)->first();
 
-        if (!$newsletter) {
+        if (! $newsletter) {
             return view('newsletter.unsubscribe', [
                 'success' => false,
                 'message' => 'Linkul de dezabonare este invalid sau nu mai este disponibil.',

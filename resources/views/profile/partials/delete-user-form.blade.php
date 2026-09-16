@@ -5,7 +5,7 @@
         </h2>
 
         <p class="mt-1 text-sm text-gray-600">
-            {{ __('Once your account is deleted, all of its resources and data will be permanently deleted. Before deleting your account, please download any data or information that you wish to retain.') }}
+            Accesul la cont va fi eliminat și datele de profil vor fi anonimizate. Comenzile, retururile, reclamațiile și rambursările se păstrează când este necesar pentru obligații legale și soluționarea lor.
         </p>
     </header>
 
@@ -24,7 +24,7 @@
             </h2>
 
             <p class="mt-1 text-sm text-gray-600">
-                {{ __('Once your account is deleted, all of its resources and data will be permanently deleted. Please enter your password to confirm you would like to permanently delete your account.') }}
+                Confirmă cu parola eliminarea accesului la cont. Evidențele contractuale și legale necesare vor fi păstrate.
             </p>
 
             <div class="mt-6">

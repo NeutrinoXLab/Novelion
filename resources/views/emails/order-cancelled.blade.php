@@ -55,7 +55,7 @@ Salut,
 
 <strong>
 
-{{ $order->first_name }} {{ $order->last_name }}
+{{ $order->shipping_first_name ?: $order->first_name }} {{ $order->shipping_last_name ?: $order->last_name }}
 
 </strong>
 
@@ -70,6 +70,14 @@ Comanda
 <strong>{{ $order->order_number }}</strong>
 
 a fost anulată.
+
+@if($order->refund_status === 'completed')
+Rambursarea a fost confirmată de procesator.
+@elseif($order->refund_status === 'processing' || $order->refund_status === 'initiated')
+Rambursarea este în curs; nu este încă finalizată.
+@else
+Comanda neplătită a fost anulată; nu există o rambursare aferentă.
+@endif
 
 <br><br>
 
@@ -199,21 +207,21 @@ Adresa de livrare
 
 <strong>
 
-{{ $order->first_name }} {{ $order->last_name }}
+{{ $order->shipping_first_name ?: $order->first_name }} {{ $order->shipping_last_name ?: $order->last_name }}
 
 </strong>
 
 <br>
 
-{{ $order->address }}
+{{ $order->shipping_address ?: $order->address }}
 
 <br>
 
-{{ $order->postal_code }} {{ $order->city }}
+{{ $order->shipping_postal_code ?: $order->postal_code }} {{ $order->shipping_city ?: $order->city }}
 
 <br>
 
-{{ $order->county }}
+{{ $order->shipping_county ?: $order->county }}
 
 </p>
 
@@ -265,7 +273,7 @@ Novelion
 
 <p style="margin-top:8px;color:#d6e4ff;">
 
-contact@novelions.ro
+novelionprime@gmail.com
 
 </p>
 

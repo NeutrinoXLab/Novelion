@@ -6,9 +6,9 @@
 
             <div class="flex items-center gap-6">
 
-                <span>🚚 Livrare rapidă în 24-48h</span>
+                <span>🚚 Livrare în România</span>
 
-                <span>↩ Retur simplu în 30 de zile</span>
+                <span>↩ Retur simplu în 14 zile</span>
 
                 <span>💬 Suport dedicat</span>
 
@@ -18,7 +18,7 @@
 
                 <span>☎ 0770 123 456</span>
 
-                <span>✉ contact@novelion.ro</span>
+                <span>✉ novelionprime@gmail.com</span>
 
             </div>
 

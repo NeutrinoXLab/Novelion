@@ -698,11 +698,12 @@
                         </div>
 
                         {{-- BUTON --}}
+                        <p class="mt-6 text-sm text-slate-600">Livrare numai în România. Prețul total și costul livrării sunt afișate mai sus. Prin comandă accepți <a class="underline" href="{{ route('pages.terms') }}">termenii</a>; consultă <a class="underline" href="{{ route('pages.returns') }}">retururile și garanțiile</a> și <a class="underline" href="{{ route('pages.shipping') }}">livrarea</a>. Confirmarea comenzii se trimite pe email.</p>
                         <button
                             type="submit"
                             class="w-full mt-8 bg-cyan-500 hover:bg-cyan-600 text-white py-4 rounded-2xl font-bold transition">
 
-                            Plasează comanda
+                            Comandă cu obligație de plată
 
                         </button>
 

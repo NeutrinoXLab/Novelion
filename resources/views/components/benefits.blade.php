@@ -13,7 +13,7 @@
                 </h3>
 
                 <p class="mt-2 text-sm text-slate-600">
-                    Expediem comenzile în 24-48 ore prin curier.
+                    Pregătim comenzile pentru predare către curier în zilele lucrătoare.
                 </p>
 
             </div>

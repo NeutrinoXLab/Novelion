@@ -34,6 +34,22 @@
     @endif
 
 
+    {{-- Mesaj informativ --}}
+    @if(session('info'))
+
+        <div class="max-w-7xl mx-auto px-6 mt-6">
+
+            <div class="bg-blue-100 border border-blue-300 text-blue-800 rounded-2xl px-6 py-4">
+
+                {{ session('info') }}
+
+            </div>
+
+        </div>
+
+    @endif
+
+
     {{-- Mesaj de eroare --}}
     @if(session('error'))
 

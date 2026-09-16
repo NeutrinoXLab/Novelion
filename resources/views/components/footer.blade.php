@@ -137,7 +137,7 @@
                 <ul class="space-y-2">
 
                     <li>
-                        📍 Ploiești, România
+                        📍 Str. Daciei nr. 11, Ploiești, Prahova, 100352
                     </li>
 
                     <li>
@@ -165,7 +165,10 @@
 
             <p>
                 © {{ date('Y') }} NOVELION S.R.L. Toate drepturile rezervate.
+                <span class="block">CUI 52627291 · J2025075714007 · Neplătitoare de TVA</span>
             </p>
+
+            <a href="https://reclamatiisal.anpc.ro" target="_blank" rel="noopener noreferrer" class="mt-3 md:mt-0 flex items-center justify-center w-[250px] h-[50px] bg-white" aria-label="Soluționare alternativă a litigiilor ANPC"><img src="{{ asset('images/sal-anpc-oficial.png') }}" width="201" height="50" alt="Pictograma oficială SAL – ANPC"></a>
 
             <p class="mt-3 md:mt-0 text-slate-400">
                 Mulțumim că ai ales Novelion ❤️

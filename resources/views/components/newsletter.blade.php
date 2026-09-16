@@ -9,6 +9,7 @@
     <p class="mt-4 text-cyan-100">
         Fii primul care află despre produse noi, promoții și oferte exclusive.
     </p>
+    <p class="mt-2 text-sm text-cyan-100">Abonarea devine activă numai după confirmarea prin linkul primit pe email. Te poți dezabona oricând.</p>
 
 
     {{-- Mesaj de succes --}}

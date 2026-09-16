@@ -39,7 +39,7 @@
 
             @endif
 
-            @if($product->sale_price)
+            @if($product->sale_price && $product->referencePrice() > (float) $product->sale_price)
 
                 <span
                     class="bg-red-100 text-red-700 px-4 py-2 rounded-full text-sm font-semibold">
@@ -150,17 +150,19 @@
 
     <div class="mt-8">
 
-        @if($product->sale_price)
+        @if($product->sale_price && $product->referencePrice() > (float) $product->sale_price)
 
             @php
 
+                $referencePrice = $product->referencePrice();
+
                 $discount = round(
-                    (($product->selling_price-$product->sale_price)
-                    /$product->selling_price)*100
+                    (($referencePrice-$product->sale_price)
+                    /$referencePrice)*100
                 );
 
                 $saved =
-                    $product->selling_price-$product->sale_price;
+                    $referencePrice-$product->sale_price;
 
             @endphp
 
@@ -185,7 +187,7 @@
 
                 <span class="text-2xl text-slate-400 line-through">
 
-                    {{ number_format($product->selling_price,2,',','.') }} Lei
+                    {{ number_format($referencePrice,2,',','.') }} Lei
 
                 </span>
 
@@ -202,7 +204,7 @@
 
             <div class="text-5xl font-bold text-cyan-600">
 
-                {{ number_format($product->selling_price,2,',','.') }} Lei
+                {{ number_format($product->sale_price ?: $product->selling_price,2,',','.') }} Lei
 
             </div>
 
@@ -277,7 +279,7 @@
 
             <span class="text-slate-700">
 
-                Livrare rapidă în 24-48 ore
+                Livrare numai în România; termenul curierului este comunicat separat
 
             </span>
 
@@ -289,7 +291,7 @@
 
             <span class="text-slate-700">
 
-                Retur gratuit în 30 de zile
+                Retur în 14 zile
 
             </span>
 
@@ -301,13 +303,25 @@
 
             <span class="text-slate-700">
 
-                Garanție și suport dedicat
+                Garanție legală de conformitate
 
             </span>
 
         </div>
 
     </div>
+
+    @if($product->manufacturer_name || $product->model_identifier || $product->warnings || $product->safety_instructions)
+    <div class="mt-12"><h2 class="text-2xl font-bold mb-4">Identificare și siguranță</h2>
+        @if($product->manufacturer_name)<p><strong>Producător:</strong> {{ $product->manufacturer_name }}</p>@endif
+        @if($product->manufacturer_contact)<p><strong>Contact producător:</strong> {{ $product->manufacturer_contact }}</p>@endif
+        @if($product->model_identifier)<p><strong>Model/identificare:</strong> {{ $product->model_identifier }}</p>@endif
+        @if($product->eu_responsible_person_name)<p><strong>Persoană responsabilă în UE:</strong> {{ $product->eu_responsible_person_name }} — {{ $product->eu_responsible_person_contact }}</p>@endif
+        @if($product->warnings)<p><strong>Avertismente:</strong> {{ $product->warnings }}</p>@endif
+        @if($product->safety_instructions)<p><strong>Instrucțiuni:</strong> {{ $product->safety_instructions }}</p>@endif
+        @if($product->commercial_warranty)<p><strong>Garanție comercială a producătorului:</strong> {{ $product->commercial_warranty }}</p>@endif
+    </div>
+    @endif
 
     {{-- DESCRIERE --}}
     <div class="mt-12">

@@ -6,6 +6,7 @@
 
     @auth
 
+        @if(auth()->user()->orders()->whereIn('status', ['paid','processing','shipped','delivered'])->whereHas('items', fn($q) => $q->where('product_id', $product->id))->exists())
         <div class="bg-white rounded-3xl shadow border border-slate-200 p-8 mb-10">
 
             <h3 class="text-xl font-bold mb-6">
@@ -64,6 +65,9 @@
             </form>
 
         </div>
+        @else
+        <div class="bg-slate-100 rounded-2xl p-6 mb-10">Poți scrie o recenzie după ce ai cumpărat acest produs de la Novelion.</div>
+        @endif
 
     @else
 
@@ -96,6 +100,7 @@
                             {{ str_repeat('★',$review->rating) }}
 
                         </div>
+                        @if($review->is_verified_purchase)<div class="text-xs font-semibold text-green-700 mt-1">Achiziție verificată</div>@endif
 
                     </div>
 

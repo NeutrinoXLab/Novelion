@@ -136,7 +136,9 @@
     <span>Livrare</span>
 
     <span class="font-semibold">
-        @if($shippingCost > 0)
+        @if(!$shippingName)
+            <span class="text-red-600">Nu poate fi calculată</span>
+        @elseif($shippingCost > 0)
             {{ number_format($shippingCost, 2, ',', '.') }} Lei
         @else
             Gratuită
@@ -154,11 +156,16 @@
                             </span>
 
                             <span class="text-4xl font-bold text-cyan-600">
-                                {{ number_format($total,2,',','.') }} Lei
+                                @if($shippingName)
+                                    {{ number_format($total,2,',','.') }} Lei
+                                @else
+                                    În curs de calcul
+                                @endif
                             </span>
 
                         </div>
 
+                        @if($shippingName)
                         <a
                             href="{{ route('checkout.index') }}"
                             class="block w-full mt-10 bg-cyan-500 hover:bg-cyan-600 text-white py-4 rounded-2xl text-xl font-bold text-center transition">
@@ -166,6 +173,9 @@
                             Finalizează comanda
 
                         </a>
+                        @else
+                        <p class="mt-8 rounded-xl bg-red-50 p-4 text-red-700">Livrarea nu poate fi calculată. Finalizarea comenzii este momentan indisponibilă.</p>
+                        @endif
 
                         <form
                             action="{{ route('cart.clear') }}"

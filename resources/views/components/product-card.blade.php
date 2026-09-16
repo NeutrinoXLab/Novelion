@@ -59,7 +59,7 @@
 
 
         {{-- BADGE REDUCERE / NOU --}}
-        @if($product->sale_price)
+        @if($product->sale_price && $product->referencePrice() > (float) $product->sale_price)
 
             <span
                 style="
@@ -228,10 +228,10 @@
             "
         >
 
-            @if($product->sale_price)
+            @if($product->sale_price && $product->referencePrice() > (float) $product->sale_price)
 
                 <div class="text-sm text-gray-400 line-through">
-                    {{ number_format($product->selling_price, 2, ',', '.') }} Lei
+                    {{ number_format($product->referencePrice(), 2, ',', '.') }} Lei
                 </div>
 
                 <div class="text-2xl font-bold text-red-600">
@@ -243,7 +243,7 @@
                 <div class="h-5"></div>
 
                 <div class="text-2xl font-bold text-cyan-600">
-                    {{ number_format($product->selling_price, 2, ',', '.') }} Lei
+                    {{ number_format($product->sale_price ?: $product->selling_price, 2, ',', '.') }} Lei
                 </div>
 
             @endif

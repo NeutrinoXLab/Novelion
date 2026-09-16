@@ -59,8 +59,8 @@ Salut,
 
 <strong>
 
-{{ $order->first_name }}
-{{ $order->last_name }}
+{{ $order->shipping_first_name ?: $order->first_name }}
+{{ $order->shipping_last_name ?: $order->last_name }}
 
 </strong>
 
@@ -244,23 +244,23 @@ Date de livrare
 
 <strong>
 
-{{ $order->first_name }}
-{{ $order->last_name }}
+{{ $order->shipping_first_name ?: $order->first_name }}
+{{ $order->shipping_last_name ?: $order->last_name }}
 
 </strong>
 
 <br>
 
-{{ $order->address }}
+{{ $order->shipping_address ?: $order->address }}
 
 <br>
 
-{{ $order->postal_code }}
-{{ $order->city }}
+{{ $order->shipping_postal_code ?: $order->postal_code }}
+{{ $order->shipping_city ?: $order->city }}
 
 <br>
 
-{{ $order->county }}
+{{ $order->shipping_county ?: $order->county }}
 
 <br><br>
 
@@ -352,7 +352,7 @@ Shopping made simple.
 
 <p style="margin-top:8px;color:#d6e4ff;">
 
-contact@novelions.ro
+novelionprime@gmail.com
 
 </p>
 
@@ -372,5 +372,6 @@ contact@novelions.ro
 </tr>
 </table>
 
+<p style="padding:20px">NOVELION S.R.L., CUI 52627291, J2025075714007, Str. Daciei nr. 11, Ploiești, Prahova, 100352, neplătitoare de TVA. Contact: novelionprime@gmail.com, 0750 444 672. Livrăm numai în România. Pentru consumatori, dreptul de retragere poate fi exercitat în 14 zile de la primire prin cont sau prin email; clientul suportă costul direct al returului din răzgândire. Neconformitățile se soluționează separat, în cadrul garanției legale. Formular-model: Vă informez că mă retrag din contract pentru [produse], comandate/primite la [date]; nume, adresă, data și semnătura numai pentru hârtie. Detalii: {{ route('pages.terms') }} și {{ route('pages.returns') }}.</p>
 </body>
 </html>

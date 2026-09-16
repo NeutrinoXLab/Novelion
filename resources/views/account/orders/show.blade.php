@@ -106,7 +106,7 @@
              * Eligibilitate retur
              */
             $returnDeadline = $order->delivered_at
-                ? $order->delivered_at->copy()->addDays(30)
+                ? app(\App\Services\WithdrawalDeadline::class)->forDelivery($order->delivered_at)
                 : null;
 
             $existingReturnRequest = $order->returnRequests()
@@ -120,11 +120,8 @@
 
             $canRequestReturn =
                 $order->status === 'delivered' &&
-                $order->payment_status === 'paid' &&
                 $order->delivered_at &&
-                $returnDeadline &&
-                now()->lt($returnDeadline) &&
-                ! $existingReturnRequest;
+                $returnDeadline;
 
         @endphp
 
@@ -238,6 +235,12 @@
 
                 @endif
 
+                @foreach($order->returnRequests as $return)
+                    @if($return->refund_method === 'bank_transfer' && ! $return->bank_transfer_accepted_at && $return->status !== 'rejected')
+                        <a href="{{ route('returns.bank-details', $return) }}" class="block rounded-xl bg-cyan-50 p-4 text-cyan-900 underline">Comunică IBAN-ul și acordul pentru eventualul transfer bancar aferent solicitării #{{ $return->id }}</a>
+                    @endif
+                @endforeach
+
             </div>
 
 
@@ -259,6 +262,15 @@
 
                     </span>
 
+                    @if($order->payment_method === 'stripe' && $order->payment_status === 'pending')
+                        <form method="POST" action="{{ route('checkout.cancel-order', $order) }}" class="mt-6">
+                            @csrf
+                            <button type="submit" class="w-full border border-red-300 text-red-700 py-3 rounded-xl font-semibold hover:bg-red-50">
+                                Anulează comanda neplătită
+                            </button>
+                        </form>
+                    @endif
+
                 </div>
 
 
@@ -268,26 +280,26 @@
                     <div class="bg-white rounded-3xl shadow-sm p-6 lg:p-8">
 
                         <h2 class="text-2xl font-bold text-slate-900 mb-4">
-                            Retur produs
+                            Vreau să returnez un produs / Produs defect/neconform
                         </h2>
 
                         <p class="text-slate-600 text-sm leading-6 mb-5">
-                            Poți solicita returul acestei comenzi în termen de
-                            30 zile calendaristice de la primirea produselor.
+                            Pentru retragere ai 14 zile; reclamația pentru neconformitate este un flux separat.
                         </p>
 
                         <p class="text-slate-500 text-sm mb-5">
-                            Termenul expiră la
-                            <span class="font-semibold text-slate-700">
-                                {{ $returnDeadline->format('d.m.Y H:i') }}
-                            </span>.
+                            @if(now()->timezone('Europe/Bucharest')->lessThanOrEqualTo($returnDeadline))
+                                Termenul de retragere expiră la <strong>{{ $returnDeadline->format('d.m.Y H:i') }}</strong>.
+                            @else
+                                Termenul de retragere a expirat. Poți în continuare raporta un produs defect/neconform.
+                            @endif
                         </p>
 
                         <a
                             href="{{ route('returns.create', $order) }}"
                             class="block w-full bg-cyan-500 hover:bg-cyan-600 text-white py-3 rounded-xl font-semibold text-center transition">
 
-                            Solicită retur
+                            Alege produsul și cantitatea
 
                         </a>
 

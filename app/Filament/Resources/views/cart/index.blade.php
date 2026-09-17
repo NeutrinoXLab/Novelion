@@ -33,7 +33,7 @@
                                         <img
                                             src="{{ asset('storage/'.$item['product']->primary_image_path) }}"
                                             alt="{{ $item['product']->name }}"
-                                            class="w-full h-full object-cover">
+                                            class="w-full h-full object-contain p-1">
 
                                     @else
 

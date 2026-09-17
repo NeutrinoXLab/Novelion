@@ -77,7 +77,8 @@ class ImagesRelationManager extends RelationManager
                     ->label('Imagine')
                     ->disk('public')
                     ->square()
-                    ->size(60),
+                    ->size(60)
+                    ->extraImgAttributes(['class' => 'object-contain bg-white']),
 
                 IconColumn::make('is_primary')
                     ->label('Principală')

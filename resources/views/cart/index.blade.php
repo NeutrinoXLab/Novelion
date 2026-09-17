@@ -26,13 +26,13 @@
                             <div class="flex flex-col sm:flex-row gap-6 sm:items-center">
 
                                 {{-- Imagine --}}
-                                <div class="w-32 h-32 sm:w-28 sm:h-28 rounded-2xl overflow-hidden bg-slate-100 flex-shrink-0 mx-auto sm:mx-0">
+                                <div class="w-32 h-32 sm:w-28 sm:h-28 rounded-2xl overflow-hidden bg-white border border-slate-100 flex-shrink-0 mx-auto sm:mx-0">
 
                                     @if($item['product']->primary_image_path)
 
                                         <img
                                             src="{{ asset('storage/'.$item['product']->primary_image_path) }}"
-                                            class="w-full h-full object-cover">
+                                            class="w-full h-full object-contain p-1">
 
                                     @else
 

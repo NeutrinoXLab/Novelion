@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class Product extends Model
 {
@@ -70,6 +72,24 @@ class Product extends Model
 
     protected static function booted(): void
     {
+        static::creating(function (Product $product): void {
+            $product->slug = static::uniqueSlug($product->slug ?: $product->name);
+        });
+
+        static::updating(function (Product $product): void {
+            if ($product->isDirty('slug')) {
+                $product->slug = static::uniqueSlug($product->slug ?: $product->name, $product->getKey());
+            }
+        });
+
+        static::deleting(function (Product $product): void {
+            if ($product->orderItems()->exists()) {
+                throw new \DomainException('Produsul nu poate fi șters deoarece apare în comenzi istorice. Dezactivează produsul pentru a-l retrage din vânzare.');
+            }
+
+            Storage::disk('public')->delete($product->images()->pluck('image_path')->all());
+        });
+
         static::created(function (Product $product): void {
             $product->priceHistory()->create(['price' => $product->sale_price ?: $product->selling_price, 'effective_at' => $product->created_at ?? now()]);
         });
@@ -83,6 +103,22 @@ class Product extends Model
                 }
             }
         });
+    }
+
+    public static function uniqueSlug(string $value, ?int $ignoreId = null): string
+    {
+        $base = Str::slug(str_replace(['/', '\\'], '-', $value)) ?: 'produs';
+        $slug = $base;
+        $suffix = 2;
+
+        while (static::query()
+            ->when($ignoreId, fn ($query) => $query->whereKeyNot($ignoreId))
+            ->where('slug', $slug)
+            ->exists()) {
+            $slug = $base.'-'.$suffix++;
+        }
+
+        return $slug;
     }
 
     public function priceHistory(): HasMany
@@ -132,6 +168,11 @@ class Product extends Model
     {
         return $this->hasMany(ProductImage::class)
             ->orderBy('sort_order');
+    }
+
+    public function orderItems(): HasMany
+    {
+        return $this->hasMany(OrderItem::class);
     }
 
     /**

@@ -2,13 +2,13 @@
 
 namespace App\Filament\Resources\Products\Schemas;
 
+use App\Models\Product;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
-use Illuminate\Support\Str;
 
 class ProductForm
 {
@@ -38,13 +38,17 @@ class ProductForm
                             ->required()
                             ->maxLength(255)
                             ->live(onBlur: true)
-                            ->afterStateUpdated(function ($state, callable $set) {
-                                $set('slug', Str::slug($state));
+                            ->afterStateUpdated(function ($state, callable $set, callable $get, ?Product $record) {
+                                if (! $record && blank($get('slug'))) {
+                                    $set('slug', Product::uniqueSlug($state));
+                                }
                             }),
 
                         TextInput::make('slug')
-                            ->label('Slug')
-                            ->required()
+                            ->label('Adresă URL (generată automat)')
+                            ->helperText('Este generată automat la creare și rămâne stabilă când editezi numele produsului.')
+                            ->readOnly()
+                            ->dehydrated()
                             ->maxLength(255),
 
                         TextInput::make('sku')

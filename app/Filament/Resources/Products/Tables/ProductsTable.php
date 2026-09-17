@@ -2,8 +2,11 @@
 
 namespace App\Filament\Resources\Products\Tables;
 
+use App\Models\Product;
+use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -24,6 +27,7 @@ class ProductsTable
                     ->disk('public')
                     ->square()
                     ->height(60)
+                    ->extraImgAttributes(['class' => 'object-contain bg-white'])
                     ->defaultImageUrl('https://placehold.co/60x60?text=No+Image'),
 
                 TextColumn::make('name')
@@ -78,6 +82,24 @@ class ProductsTable
                 ViewAction::make(),
 
                 EditAction::make(),
+                DeleteAction::make()
+                    ->modalHeading('Șterge produsul')
+                    ->modalDescription('Produsul poate fi șters numai dacă nu apare în comenzi istorice.')
+                    ->requiresConfirmation()
+                    ->before(function (DeleteAction $action, Product $record): void {
+                        if (! $record->orderItems()->exists()) {
+                            return;
+                        }
+
+                        Notification::make()
+                            ->danger()
+                            ->title('Produsul nu poate fi șters')
+                            ->body('Produsul apare în comenzi istorice. Dezactivează-l pentru a-l retrage din vânzare.')
+                            ->send();
+
+                        $action->halt();
+                    })
+                    ->successNotificationTitle('Produsul a fost șters.'),
 
             ]);
     }

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Products\Schemas;
 
 use App\Models\Product;
+use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -46,20 +47,23 @@ class ProductForm
 
                         TextInput::make('slug')
                             ->label('Adresă URL (generată automat)')
-                            ->helperText('Este generată automat la creare și rămâne stabilă când editezi numele produsului.')
+                            ->helperText('Adresa simplificată a paginii produsului. Se generează automat și, de regulă, nu trebuie modificată.')
                             ->readOnly()
                             ->dehydrated()
                             ->maxLength(255),
 
                         TextInput::make('sku')
                             ->label('SKU')
+                            ->helperText('Cod unic intern al produsului. Ajută la identificarea produsului în stoc, comenzi și administrare.')
                             ->required(),
 
                         TextInput::make('ean')
-                            ->label('EAN'),
+                            ->label('EAN / GTIN')
+                            ->helperText('Codul global de identificare tipărit de obicei sub codul de bare. Completează-l numai dacă produsul are un astfel de cod.'),
 
                         TextInput::make('supplier_reference')
-                            ->label('Cod furnizor'),
+                            ->label('Cod furnizor')
+                            ->helperText('Codul folosit de furnizor pentru acest produs. Util la reaprovizionare și la identificarea produsului pe documentele furnizorului.'),
 
                     ])
                     ->columns(2),
@@ -69,6 +73,7 @@ class ProductForm
 
                         TextInput::make('purchase_price')
                             ->label('Preț achiziție')
+                            ->helperText('Costul de cumpărare al produsului, folosit intern pentru evidență și calculul marjei.')
                             ->required()
                             ->numeric()
                             ->prefix('Lei'),
@@ -81,6 +86,7 @@ class ProductForm
 
                         TextInput::make('sale_price')
                             ->label('Preț promoțional')
+                            ->helperText('Prețul de vânzare redus, folosit atunci când produsul este oferit la promoție.')
                             ->numeric()
                             ->prefix('Lei'),
 
@@ -102,12 +108,14 @@ class ProductForm
 
                         TextInput::make('low_stock_threshold')
                             ->label('Prag stoc minim')
+                            ->helperText('Cantitatea la care produsul este semnalat ca având stoc redus, pentru avertizare și reaprovizionare.')
                             ->required()
                             ->numeric()
                             ->default(5),
 
                         TextInput::make('weight')
                             ->label('Greutate (kg)')
+                            ->helperText('Greutatea unei bucăți, în kilograme. Este folosită la stabilirea opțiunilor și costului de transport.')
                             ->numeric()
                             ->minValue(0.01)
                             ->required(fn ($get) => (bool) $get('is_active'))
@@ -145,21 +153,27 @@ class ProductForm
                             ->label('Descriere scurtă')
                             ->rows(3),
 
-                        Textarea::make('description')
+                        RichEditor::make('description')
                             ->label('Descriere completă')
-                            ->rows(8),
+                            ->helperText('Formatează descrierea cu titluri, text evidențiat și liste. Conținutul este afișat pe toată lățimea paginii produsului.')
+                            ->toolbarButtons([
+                                ['bold', 'italic', 'textColor'],
+                                ['h2', 'h3'],
+                                ['bulletList', 'orderedList'],
+                                ['undo', 'redo'],
+                            ]),
 
                     ]),
 
                 Section::make('Siguranță, identificare și garanție comercială')
                     ->description('Completează numai informații reale. Garanția comercială a producătorului este separată de garanția legală.')
                     ->schema([
-                        TextInput::make('manufacturer_name')->label('Producător')->required(fn ($get) => (bool) $get('is_active')),
-                        Textarea::make('manufacturer_contact')->label('Contact producător')->required(fn ($get) => (bool) $get('is_active')),
-                        TextInput::make('model_identifier')->label('Marcă/model/identificare')->required(fn ($get) => (bool) $get('is_active')),
-                        Toggle::make('requires_eu_responsible_person')->label('Necesită persoană responsabilă în UE')->live(),
-                        TextInput::make('eu_responsible_person_name')->label('Persoană responsabilă în UE')->required(fn ($get) => (bool) $get('is_active') && (bool) $get('requires_eu_responsible_person')),
-                        Textarea::make('eu_responsible_person_contact')->label('Contact persoană responsabilă')->required(fn ($get) => (bool) $get('is_active') && (bool) $get('requires_eu_responsible_person')),
+                        TextInput::make('manufacturer_name')->label('Producător')->helperText('Denumirea persoanei sau companiei care a fabricat produsul. Introdu numai informația reală de pe produs ori documentele sale.')->required(fn ($get) => (bool) $get('is_active')),
+                        Textarea::make('manufacturer_contact')->label('Date de contact producător')->helperText('Adresa poștală și, dacă sunt disponibile, adresa electronică sau alte date oficiale de contact ale producătorului.')->required(fn ($get) => (bool) $get('is_active')),
+                        TextInput::make('model_identifier')->label('Marcă/model/identificare')->helperText('Identificatorul prin care produsul poate fi recunoscut, precum marca, modelul sau seria.')->required(fn ($get) => (bool) $get('is_active')),
+                        Toggle::make('requires_eu_responsible_person')->label('Necesită persoană responsabilă în UE')->helperText('Activează dacă produsul are o persoană responsabilă în Uniunea Europeană ale cărei date trebuie afișate.')->live(),
+                        TextInput::make('eu_responsible_person_name')->label('Persoană responsabilă în UE')->helperText('Numele persoanei sau companiei responsabile în UE, când este relevant pentru acest produs.')->required(fn ($get) => (bool) $get('is_active') && (bool) $get('requires_eu_responsible_person')),
+                        Textarea::make('eu_responsible_person_contact')->label('Date de contact persoană responsabilă')->helperText('Datele oficiale de contact ale persoanei responsabile în UE. Nu completa date presupuse sau fictive.')->required(fn ($get) => (bool) $get('is_active') && (bool) $get('requires_eu_responsible_person')),
                         Textarea::make('warnings')->label('Avertismente'),
                         Textarea::make('safety_instructions')->label('Informații/instrucțiuni de siguranță'),
                         Textarea::make('commercial_warranty')->label('Garanție comercială a producătorului (dacă există)'),
@@ -169,10 +183,12 @@ class ProductForm
                     ->schema([
 
                         TextInput::make('seo_title')
-                            ->label('Titlu SEO'),
+                            ->label('Titlu SEO')
+                            ->helperText('Titlul folosit de motoarele de căutare pentru pagina produsului. Este recomandat să descrie clar produsul.'),
 
                         Textarea::make('seo_description')
                             ->label('Descriere SEO')
+                            ->helperText('Scurt rezumat al produsului pentru motoarele de căutare. Poate apărea sub titlul paginii în rezultatele căutării.')
                             ->rows(3),
 
                     ]),
@@ -182,18 +198,22 @@ class ProductForm
 
                         Toggle::make('is_active')
                             ->label('Activ')
+                            ->helperText('Face produsul disponibil în magazin. Produsele inactive rămân în administrare.')
                             ->default(false),
 
                         Toggle::make('is_featured')
                             ->label('Recomandat')
+                            ->helperText('Afișează insigna „Recomandat” pe pagina produsului.')
                             ->default(false),
 
                         Toggle::make('is_new')
                             ->label('Produs nou')
+                            ->helperText('Afișează insigna „Nou” și include produsul în lista de produse noi.')
                             ->default(true),
 
                         Toggle::make('is_on_sale')
                             ->label('În promoție')
+                            ->helperText('Marchează intern produsul ca fiind în promoție. Reducerea afișată depinde de existența unui preț promoțional valid.')
                             ->default(false),
 
                     ])

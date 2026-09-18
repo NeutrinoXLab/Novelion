@@ -113,7 +113,42 @@ class CatalogAdministrationTest extends TestCase
         $this->actingAs($admin)->get('/admin/products')->assertOk();
         $this->actingAs($admin)->get('/admin/products/'.$product->id.'/edit')
             ->assertOk()
-            ->assertSeeText('Adresă URL (generată automat)');
+            ->assertSeeText('Adresă URL (generată automat)')
+            ->assertSeeText('Cod unic intern al produsului')
+            ->assertSeeText('Formatează descrierea cu titluri');
+    }
+
+    public function test_product_page_places_description_after_the_main_grid_and_uses_the_updated_shipping_text(): void
+    {
+        $product = $this->product(Category::create(['name' => 'Iluminat', 'slug' => 'iluminat']));
+        $product->update(['description' => "Prima linie\nA doua linie"]);
+
+        $response = $this->get(route('products.show', $product));
+
+        $response
+            ->assertOk()
+            ->assertSeeText('Livrare prin curier cu acoperire națională.')
+            ->assertDontSeeText('termenul curierului este comunicat separat')
+            ->assertSeeInOrder([
+                'grid grid-cols-1 lg:grid-cols-2 gap-16',
+                'product-description-heading',
+                '<section class="mt-16">',
+            ], false)
+            ->assertSee("Prima linie<br />\nA doua linie", false);
+    }
+
+    public function test_formatted_product_description_is_rendered_and_unsafe_html_is_removed(): void
+    {
+        $product = $this->product(Category::create(['name' => 'Iluminat', 'slug' => 'iluminat']));
+        $product->update([
+            'description' => '<h2>Detalii importante</h2><p><strong>Rezistent</strong> la exterior.</p><script>alert("xss")</script>',
+        ]);
+
+        $this->get(route('products.show', $product))
+            ->assertOk()
+            ->assertSee('<h2>Detalii importante</h2>', false)
+            ->assertSee('<strong>Rezistent</strong>', false)
+            ->assertDontSee('alert("xss")', false);
     }
 
     private function product(Category $category, string $name = 'Produs test', ?string $slug = null, ?string $sku = null): Product

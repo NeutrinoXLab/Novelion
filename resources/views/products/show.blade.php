@@ -16,6 +16,8 @@
 
         </div>
 
+        @include('products.partials.description')
+
         {{-- Recenzii --}}
         <x-product-reviews :product="$product" />
 

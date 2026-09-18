@@ -279,7 +279,7 @@
 
             <span class="text-slate-700">
 
-                Livrare numai în România; termenul curierului este comunicat separat
+                Livrare prin curier cu acoperire națională.
 
             </span>
 
@@ -322,22 +322,5 @@
         @if($product->commercial_warranty)<p><strong>Garanție comercială a producătorului:</strong> {{ $product->commercial_warranty }}</p>@endif
     </div>
     @endif
-
-    {{-- DESCRIERE --}}
-    <div class="mt-12">
-
-        <h2 class="text-2xl font-bold mb-4">
-
-            Descriere
-
-        </h2>
-
-        <div class="prose prose-slate max-w-none leading-8">
-
-            {!! nl2br(e($product->description)) !!}
-
-        </div>
-
-    </div>
 
 </div>

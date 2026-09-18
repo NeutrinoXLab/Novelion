@@ -114,7 +114,9 @@ class CatalogAdministrationTest extends TestCase
         $this->actingAs($admin)->get('/admin/products/'.$product->id.'/edit')
             ->assertOk()
             ->assertSeeText('Adresă URL (generată automat)')
-            ->assertSeeText('Cod unic intern al produsului')
+            ->assertSee('Cod unic intern al produsului', false)
+            ->assertSee('x-tooltip', false)
+            ->assertSeeText('Siguranță și identificare produs')
             ->assertSeeText('Formatează descrierea cu titluri');
     }
 

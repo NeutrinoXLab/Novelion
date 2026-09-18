@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Products\Schemas;
 
 use App\Models\Product;
+use Filament\Actions\Action;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -10,6 +11,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 
 class ProductForm
 {
@@ -47,23 +49,23 @@ class ProductForm
 
                         TextInput::make('slug')
                             ->label('Adresă URL (generată automat)')
-                            ->helperText('Adresa simplificată a paginii produsului. Se generează automat și, de regulă, nu trebuie modificată.')
+                            ->hintAction(self::info('slug', 'Adresa simplificată a paginii produsului. Se generează automat și, de regulă, nu trebuie modificată.'))
                             ->readOnly()
                             ->dehydrated()
                             ->maxLength(255),
 
                         TextInput::make('sku')
                             ->label('SKU')
-                            ->helperText('Cod unic intern al produsului. Ajută la identificarea produsului în stoc, comenzi și administrare.')
+                            ->hintAction(self::info('sku', 'Cod unic intern al produsului. Ajută la identificarea produsului în stoc, comenzi și administrare.'))
                             ->required(),
 
                         TextInput::make('ean')
                             ->label('EAN / GTIN')
-                            ->helperText('Codul global de identificare tipărit de obicei sub codul de bare. Completează-l numai dacă produsul are un astfel de cod.'),
+                            ->hintAction(self::info('ean', 'Codul global de identificare tipărit de obicei sub codul de bare. Completează-l numai dacă produsul are un astfel de cod.')),
 
                         TextInput::make('supplier_reference')
                             ->label('Cod furnizor')
-                            ->helperText('Codul folosit de furnizor pentru acest produs. Util la reaprovizionare și la identificarea produsului pe documentele furnizorului.'),
+                            ->hintAction(self::info('supplier_reference', 'Codul folosit de furnizor pentru acest produs. Util la reaprovizionare și la identificarea produsului pe documentele furnizorului.')),
 
                     ])
                     ->columns(2),
@@ -73,7 +75,7 @@ class ProductForm
 
                         TextInput::make('purchase_price')
                             ->label('Preț achiziție')
-                            ->helperText('Costul de cumpărare al produsului, folosit intern pentru evidență și calculul marjei.')
+                            ->hintAction(self::info('purchase_price', 'Costul de cumpărare al produsului, folosit intern pentru evidență și calculul marjei.'))
                             ->required()
                             ->numeric()
                             ->prefix('Lei'),
@@ -86,7 +88,7 @@ class ProductForm
 
                         TextInput::make('sale_price')
                             ->label('Preț promoțional')
-                            ->helperText('Prețul de vânzare redus, folosit atunci când produsul este oferit la promoție.')
+                            ->hintAction(self::info('sale_price', 'Prețul de vânzare redus, folosit atunci când produsul este oferit la promoție.'))
                             ->numeric()
                             ->prefix('Lei'),
 
@@ -108,14 +110,14 @@ class ProductForm
 
                         TextInput::make('low_stock_threshold')
                             ->label('Prag stoc minim')
-                            ->helperText('Cantitatea la care produsul este semnalat ca având stoc redus, pentru avertizare și reaprovizionare.')
+                            ->hintAction(self::info('low_stock_threshold', 'Cantitatea la care produsul este semnalat ca având stoc redus, pentru avertizare și reaprovizionare.'))
                             ->required()
                             ->numeric()
                             ->default(5),
 
                         TextInput::make('weight')
                             ->label('Greutate (kg)')
-                            ->helperText('Greutatea unei bucăți, în kilograme. Este folosită la stabilirea opțiunilor și costului de transport.')
+                            ->hintAction(self::info('weight', 'Greutatea unei bucăți, în kilograme. Este folosită la stabilirea opțiunilor și costului de transport.'))
                             ->numeric()
                             ->minValue(0.01)
                             ->required(fn ($get) => (bool) $get('is_active'))
@@ -165,15 +167,15 @@ class ProductForm
 
                     ]),
 
-                Section::make('Siguranță, identificare și garanție comercială')
+                Section::make('Siguranță și identificare produs')
                     ->description('Completează numai informații reale. Garanția comercială a producătorului este separată de garanția legală.')
                     ->schema([
-                        TextInput::make('manufacturer_name')->label('Producător')->helperText('Denumirea persoanei sau companiei care a fabricat produsul. Introdu numai informația reală de pe produs ori documentele sale.')->required(fn ($get) => (bool) $get('is_active')),
-                        Textarea::make('manufacturer_contact')->label('Date de contact producător')->helperText('Adresa poștală și, dacă sunt disponibile, adresa electronică sau alte date oficiale de contact ale producătorului.')->required(fn ($get) => (bool) $get('is_active')),
-                        TextInput::make('model_identifier')->label('Marcă/model/identificare')->helperText('Identificatorul prin care produsul poate fi recunoscut, precum marca, modelul sau seria.')->required(fn ($get) => (bool) $get('is_active')),
-                        Toggle::make('requires_eu_responsible_person')->label('Necesită persoană responsabilă în UE')->helperText('Activează dacă produsul are o persoană responsabilă în Uniunea Europeană ale cărei date trebuie afișate.')->live(),
-                        TextInput::make('eu_responsible_person_name')->label('Persoană responsabilă în UE')->helperText('Numele persoanei sau companiei responsabile în UE, când este relevant pentru acest produs.')->required(fn ($get) => (bool) $get('is_active') && (bool) $get('requires_eu_responsible_person')),
-                        Textarea::make('eu_responsible_person_contact')->label('Date de contact persoană responsabilă')->helperText('Datele oficiale de contact ale persoanei responsabile în UE. Nu completa date presupuse sau fictive.')->required(fn ($get) => (bool) $get('is_active') && (bool) $get('requires_eu_responsible_person')),
+                        TextInput::make('manufacturer_name')->label('Producător')->hintAction(self::info('manufacturer_name', 'Denumirea persoanei sau companiei care a fabricat produsul. Introdu numai informația reală de pe produs ori documentele sale.'))->required(fn ($get) => (bool) $get('is_active')),
+                        Textarea::make('manufacturer_contact')->label('Date de contact producător')->hintAction(self::info('manufacturer_contact', 'Adresa poștală și, dacă sunt disponibile, adresa electronică sau alte date oficiale de contact ale producătorului.'))->required(fn ($get) => (bool) $get('is_active')),
+                        TextInput::make('model_identifier')->label('Marcă/model/identificare')->hintAction(self::info('model_identifier', 'Identificatorul prin care produsul poate fi recunoscut, precum marca, modelul sau seria.'))->required(fn ($get) => (bool) $get('is_active')),
+                        Toggle::make('requires_eu_responsible_person')->label('Necesită persoană responsabilă în UE')->hintAction(self::info('requires_eu_responsible_person', 'Folosește această secțiune atunci când produsul trebuie să afișeze datele unei persoane sau ale unui operator responsabil stabilit în Uniunea Europeană, de exemplu pentru produse ale unui producător din afara UE.'))->live(),
+                        TextInput::make('eu_responsible_person_name')->label('Persoană responsabilă în UE')->hintAction(self::info('eu_responsible_person_name', 'Numele persoanei sau companiei responsabile în UE, când este relevant pentru acest produs.'))->required(fn ($get) => (bool) $get('is_active') && (bool) $get('requires_eu_responsible_person')),
+                        Textarea::make('eu_responsible_person_contact')->label('Date de contact persoană responsabilă')->hintAction(self::info('eu_responsible_person_contact', 'Datele oficiale de contact ale persoanei responsabile în UE. Nu completa date presupuse sau fictive.'))->required(fn ($get) => (bool) $get('is_active') && (bool) $get('requires_eu_responsible_person')),
                         Textarea::make('warnings')->label('Avertismente'),
                         Textarea::make('safety_instructions')->label('Informații/instrucțiuni de siguranță'),
                         Textarea::make('commercial_warranty')->label('Garanție comercială a producătorului (dacă există)'),
@@ -184,11 +186,11 @@ class ProductForm
 
                         TextInput::make('seo_title')
                             ->label('Titlu SEO')
-                            ->helperText('Titlul folosit de motoarele de căutare pentru pagina produsului. Este recomandat să descrie clar produsul.'),
+                            ->hintAction(self::info('seo_title', 'Titlul folosit de motoarele de căutare pentru pagina produsului. Este recomandat să descrie clar produsul.')),
 
                         Textarea::make('seo_description')
                             ->label('Descriere SEO')
-                            ->helperText('Scurt rezumat al produsului pentru motoarele de căutare. Poate apărea sub titlul paginii în rezultatele căutării.')
+                            ->hintAction(self::info('seo_description', 'Scurt rezumat al produsului pentru motoarele de căutare. Poate apărea sub titlul paginii în rezultatele căutării.'))
                             ->rows(3),
 
                     ]),
@@ -198,27 +200,37 @@ class ProductForm
 
                         Toggle::make('is_active')
                             ->label('Activ')
-                            ->helperText('Face produsul disponibil în magazin. Produsele inactive rămân în administrare.')
+                            ->hintAction(self::info('is_active', 'Face produsul disponibil în magazin. Produsele inactive rămân în administrare.'))
                             ->default(false),
 
                         Toggle::make('is_featured')
                             ->label('Recomandat')
-                            ->helperText('Afișează insigna „Recomandat” pe pagina produsului.')
+                            ->hintAction(self::info('is_featured', 'Afișează insigna „Recomandat” pe pagina produsului.'))
                             ->default(false),
 
                         Toggle::make('is_new')
                             ->label('Produs nou')
-                            ->helperText('Afișează insigna „Nou” și include produsul în lista de produse noi.')
+                            ->hintAction(self::info('is_new', 'Afișează insigna „Nou” și include produsul în lista de produse noi.'))
                             ->default(true),
 
                         Toggle::make('is_on_sale')
                             ->label('În promoție')
-                            ->helperText('Marchează intern produsul ca fiind în promoție. Reducerea afișată depinde de existența unui preț promoțional valid.')
+                            ->hintAction(self::info('is_on_sale', 'Marchează intern produsul ca fiind în promoție. Reducerea afișată depinde de existența unui preț promoțional valid.'))
                             ->default(false),
 
                     ])
                     ->columns(4),
 
             ]);
+    }
+
+    private static function info(string $name, string $text): Action
+    {
+        return Action::make("{$name}_info")
+            ->label($text)
+            ->icon(Heroicon::InformationCircle)
+            ->iconButton()
+            ->tooltip($text)
+            ->alpineClickHandler('event.preventDefault()');
     }
 }

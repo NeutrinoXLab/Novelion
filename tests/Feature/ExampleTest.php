@@ -22,7 +22,12 @@ class ExampleTest extends TestCase
     {
         $response = $this->get('/');
 
-        $response->assertStatus(200);
+        $response
+            ->assertStatus(200)
+            ->assertSee('favicon.ico?v=6e40dd7cf916', false)
+            ->assertSee('favicon-32x32.png?v=6e40dd7cf916', false)
+            ->assertSee('favicon-16x16.png?v=6e40dd7cf916', false)
+            ->assertSee('apple-touch-icon.png?v=6e40dd7cf916', false);
     }
 
     /**

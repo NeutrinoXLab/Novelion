@@ -14,7 +14,10 @@ class AuthenticationTest extends TestCase
     {
         $response = $this->get('/login');
 
-        $response->assertStatus(200);
+        $response
+            ->assertStatus(200)
+            ->assertSee('favicon.ico?v=6e40dd7cf916', false)
+            ->assertSee('apple-touch-icon.png?v=6e40dd7cf916', false);
     }
 
     public function test_users_can_authenticate_using_the_login_screen(): void

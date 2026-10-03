@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Order;
 use App\Models\ReturnRequest;
+use Illuminate\Support\Facades\DB;
 use Stripe\Checkout\Session;
 use Stripe\Refund;
 use Stripe\Stripe;
@@ -136,16 +137,18 @@ class StripeService
             ['idempotency_key' => 'order-refund-'.$order->id]
         );
 
-        $order->update([
-            'stripe_refund_id' => $refund->id,
-            'refund_status' => ($refund->status ?? null) === 'succeeded' ? 'completed' : 'processing',
-            'refunded_at' => ($refund->status ?? null) === 'succeeded' ? now() : null,
-        ]);
+        DB::transaction(function () use ($order, $refund): void {
+            $order->update([
+                'stripe_refund_id' => $refund->id,
+                'refund_status' => ($refund->status ?? null) === 'succeeded' ? 'completed' : 'processing',
+                'refunded_at' => ($refund->status ?? null) === 'succeeded' ? now() : null,
+            ]);
 
-        if (($refund->status ?? null) === 'succeeded') {
-            $order->update(['payment_status' => 'refunded', 'status' => 'cancelled']);
-            app(OrderService::class)->restoreStock($order);
-        }
+            if (($refund->status ?? null) === 'succeeded') {
+                $order->update(['payment_status' => 'refunded', 'status' => 'cancelled']);
+                app(OrderService::class)->restoreStock($order);
+            }
+        });
 
         return $refund;
     }
@@ -215,16 +218,18 @@ class StripeService
         /*
          * Cererea creată nu înseamnă că procesatorul a finalizat refund-ul.
          */
-        $return->update([
-            'stripe_refund_id' => $refund->id,
-            'refund_status' => in_array($refund->status ?? null, ['succeeded'], true) ? 'completed' : 'processing',
-            'status' => ($refund->status ?? null) === 'succeeded' ? 'refunded' : 'received',
-            'refunded_at' => ($refund->status ?? null) === 'succeeded' ? now() : null,
-        ]);
+        DB::transaction(function () use ($return, $refund): void {
+            $return->update([
+                'stripe_refund_id' => $refund->id,
+                'refund_status' => in_array($refund->status ?? null, ['succeeded'], true) ? 'completed' : 'processing',
+                'status' => ($refund->status ?? null) === 'succeeded' ? 'refunded' : 'received',
+                'refunded_at' => ($refund->status ?? null) === 'succeeded' ? now() : null,
+            ]);
 
-        if (($refund->status ?? null) === 'succeeded') {
-            $return->restoreStock();
-        }
+            if (($refund->status ?? null) === 'succeeded') {
+                $return->restoreStock();
+            }
+        });
 
         return $refund;
     }

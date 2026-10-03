@@ -217,6 +217,10 @@ class OrderService
                 ]);
             }
 
+            if ($order->payment_method === 'cash') {
+                app(TransactionalEmails::class)->order($order, 'placed');
+            }
+
             return $order;
         });
     }
@@ -249,6 +253,8 @@ class OrderService
                 'status' => 'processing',
                 'stock_restored_at' => null,
             ]);
+
+            app(TransactionalEmails::class)->order($order, 'paid');
 
             return true;
         });

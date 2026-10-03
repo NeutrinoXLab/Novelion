@@ -2,13 +2,9 @@
 
 namespace App\Models;
 
-use App\Mail\OrderCancelledMail;
-use App\Mail\OrderDeliveredMail;
-use App\Mail\OrderShippedMail;
-use App\Mail\RefundStatusMail;
+use App\Services\TransactionalEmails;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\Mail;
 
 class Order extends Model
 {
@@ -119,35 +115,15 @@ class Order extends Model
         static::updated(function (Order $order) {
 
             if ($order->wasChanged('refund_status') && $order->refund_status) {
-                Mail::to($order->email)->send(new RefundStatusMail($order, $order->refund_status, $order->total));
+                app(TransactionalEmails::class)->refund($order);
             }
 
             if (! $order->wasChanged('status')) {
                 return;
             }
 
-            switch ($order->status) {
-
-                case 'shipped':
-
-                    Mail::to($order->email)
-                        ->send(new OrderShippedMail($order));
-
-                    break;
-
-                case 'delivered':
-
-                    Mail::to($order->email)
-                        ->send(new OrderDeliveredMail($order));
-
-                    break;
-
-                case 'cancelled':
-
-                    Mail::to($order->email)
-                        ->send(new OrderCancelledMail($order));
-
-                    break;
+            if (in_array($order->status, ['shipped', 'delivered', 'cancelled'], true)) {
+                app(TransactionalEmails::class)->order($order, $order->status);
             }
         });
     }

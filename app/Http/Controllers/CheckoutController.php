@@ -2,13 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Mail\OrderPlacedMail;
 use App\Models\Order;
 use App\Services\CartService;
 use App\Services\OrderService;
 use App\Services\StripeService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Mail;
 
 class CheckoutController extends Controller
 {
@@ -186,8 +184,6 @@ class CheckoutController extends Controller
             */
 
             if ($validated['payment_method'] === 'cash') {
-
-                Mail::to($order->email)->send(new OrderPlacedMail($order->load('items')));
 
                 return redirect()
                     ->route('checkout.success', $order);

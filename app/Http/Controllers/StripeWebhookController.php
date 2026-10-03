@@ -2,13 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Mail\OrderPaidMail;
 use App\Models\Order;
 use App\Models\ReturnRequest;
 use App\Services\OrderService;
+use App\Services\TransactionalEmails;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Stripe\Exception\SignatureVerificationException;
 use Stripe\Refund;
 use Stripe\Stripe;
@@ -66,7 +65,7 @@ class StripeWebhookController extends Controller
             }
 
             if ($order && $this->matchesPaidCheckout($order, $session)) {
-                $paidOrder = DB::transaction(function () use ($order, $session): ?Order {
+                DB::transaction(function () use ($order, $session): ?Order {
                     $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
 
                     if (! $this->matchesPaidCheckout($order, $session)) {
@@ -92,6 +91,8 @@ class StripeWebhookController extends Controller
                     }
 
                     if ($order->payment_status === 'paid') {
+                        app(TransactionalEmails::class)->order($order, 'paid');
+
                         return null;
                     }
 
@@ -100,9 +101,6 @@ class StripeWebhookController extends Controller
                     return $this->orderService->markAsPaid($order) ? $order : null;
                 });
 
-                if ($paidOrder) {
-                    Mail::to($paidOrder->email)->send(new OrderPaidMail($paidOrder));
-                }
             }
         }
 
@@ -158,19 +156,26 @@ class StripeWebhookController extends Controller
                     && ($refund->currency ?? null) === 'ron'
                     && (int) ($refund->amount ?? -1) === (int) round((float) $return->refund_amount * 100)) {
                     if ($return->refund_status === 'completed') {
+                        DB::transaction(function () use ($return): void {
+                            $return->restoreStock();
+                            app(TransactionalEmails::class)->refund($return);
+                        });
+
                         return response()->json(['received' => true]);
                     }
                     $failed = $event->type === 'refund.failed' || in_array($refund->status ?? null, ['failed', 'canceled'], true);
                     $completed = ($refund->status ?? null) === 'succeeded';
-                    $return->update([
-                        'stripe_refund_id' => $return->stripe_refund_id ?: $refund->id,
-                        'refund_status' => $failed ? 'failed' : ($completed ? 'completed' : 'processing'),
-                        'status' => $completed ? 'refunded' : $return->status,
-                        'refunded_at' => $completed ? ($return->refunded_at ?? now()) : $return->refunded_at,
-                    ]);
-                    if ($completed) {
-                        $return->restoreStock();
-                    }
+                    DB::transaction(function () use ($return, $refund, $failed, $completed): void {
+                        $return->update([
+                            'stripe_refund_id' => $return->stripe_refund_id ?: $refund->id,
+                            'refund_status' => $failed ? 'failed' : ($completed ? 'completed' : 'processing'),
+                            'status' => $completed ? 'refunded' : $return->status,
+                            'refunded_at' => $completed ? ($return->refunded_at ?? now()) : $return->refunded_at,
+                        ]);
+                        if ($completed) {
+                            $return->restoreStock();
+                        }
+                    });
                 }
             } elseif ($orderId) {
                 $order = Order::query()->whereKey((int) $orderId)->where('payment_method', 'stripe')->first();
@@ -179,20 +184,33 @@ class StripeWebhookController extends Controller
                     && ($refund->currency ?? null) === 'ron'
                     && (int) ($refund->amount ?? -1) === (int) round((float) $order->total * 100)) {
                     if ($order->refund_status === 'completed') {
+                        DB::transaction(function () use ($order): void {
+                            // An old synchronous-mail failure could precede these steps.
+                            $order->update([
+                                'payment_status' => 'refunded',
+                                'status' => 'cancelled',
+                                'refunded_at' => $order->refunded_at ?? now(),
+                            ]);
+                            $this->orderService->restoreStock($order);
+                            app(TransactionalEmails::class)->refund($order);
+                        });
+
                         return response()->json(['received' => true]);
                     }
                     $failed = $event->type === 'refund.failed' || in_array($refund->status ?? null, ['failed', 'canceled'], true);
                     $completed = ($refund->status ?? null) === 'succeeded';
-                    $order->update([
-                        'stripe_refund_id' => $order->stripe_refund_id ?: $refund->id,
-                        'refund_status' => $failed ? 'failed' : ($completed ? 'completed' : 'processing'),
-                        'refunded_at' => $completed ? now() : null,
-                        'payment_status' => $completed ? 'refunded' : $order->payment_status,
-                        'status' => $completed ? 'cancelled' : $order->status,
-                    ]);
-                    if ($completed) {
-                        $this->orderService->restoreStock($order);
-                    }
+                    DB::transaction(function () use ($order, $refund, $failed, $completed): void {
+                        $order->update([
+                            'stripe_refund_id' => $order->stripe_refund_id ?: $refund->id,
+                            'refund_status' => $failed ? 'failed' : ($completed ? 'completed' : 'processing'),
+                            'refunded_at' => $completed ? now() : null,
+                            'payment_status' => $completed ? 'refunded' : $order->payment_status,
+                            'status' => $completed ? 'cancelled' : $order->status,
+                        ]);
+                        if ($completed) {
+                            $this->orderService->restoreStock($order);
+                        }
+                    });
                 }
             }
         }
@@ -338,25 +356,29 @@ class StripeWebhookController extends Controller
                                 return response()->json(['received' => true]);
                             }
 
-                            $returnRequest->update([
-                                'status' => 'refunded',
-                                'refund_status' => 'completed',
-                                'stripe_refund_id' => $returnRequest->stripe_refund_id
-                                    ?? $stripeRefundId,
-                                'refunded_at' => $returnRequest->refunded_at
-                                    ?? now(),
-                            ]);
+                            DB::transaction(function () use ($returnRequest, $order, $stripeRefundId): void {
+                                $returnRequest->update([
+                                    'status' => 'refunded',
+                                    'refund_status' => 'completed',
+                                    'stripe_refund_id' => $returnRequest->stripe_refund_id
+                                        ?? $stripeRefundId,
+                                    'refunded_at' => $returnRequest->refunded_at
+                                        ?? now(),
+                                ]);
 
-                            /*
-                             * Plata este rambursată, dar comanda
-                             * rămâne "delivered".
-                             */
-                            $order->update([
-                                'payment_status' => 'refunded',
-                                'refund_status' => 'completed',
-                            ]);
+                                /*
+                                 * Plata este rambursată, dar comanda
+                                 * rămâne "delivered".
+                                 */
+                                $order->update([
+                                    'payment_status' => 'refunded',
+                                    'refund_status' => 'completed',
+                                ]);
 
-                            $returnRequest->restoreStock();
+                                $returnRequest->restoreStock();
+                                app(TransactionalEmails::class)->refund($returnRequest);
+                                app(TransactionalEmails::class)->refund($order);
+                            });
                         } else {
                             /*
                              * Refund-ul Stripe indică un retur care
@@ -388,13 +410,16 @@ class StripeWebhookController extends Controller
                          * restaurat prin OrderService.
                          */
                     } else {
-                        $order->update([
-                            'payment_status' => 'refunded',
-                            'refund_status' => 'completed',
-                            'status' => 'cancelled',
-                        ]);
+                        DB::transaction(function () use ($order): void {
+                            $order->update([
+                                'payment_status' => 'refunded',
+                                'refund_status' => 'completed',
+                                'status' => 'cancelled',
+                            ]);
 
-                        $this->orderService->restoreStock($order);
+                            $this->orderService->restoreStock($order);
+                            app(TransactionalEmails::class)->refund($order);
+                        });
                     }
                 }
             }

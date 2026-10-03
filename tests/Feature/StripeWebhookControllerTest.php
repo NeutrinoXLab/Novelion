@@ -11,15 +11,15 @@ use App\Models\Product;
 use App\Models\ReturnRequest;
 use App\Models\User;
 use App\Services\StripeService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Stripe\ApiRequestor;
 use Stripe\HttpClient\ClientInterface;
+use Tests\Concerns\UsesCommittedDatabase;
 use Tests\TestCase;
 
 class StripeWebhookControllerTest extends TestCase
 {
-    use RefreshDatabase;
+    use UsesCommittedDatabase;
 
     private const WEBHOOK_SECRET = 'whsec_test_novelion';
 
@@ -95,6 +95,7 @@ class StripeWebhookControllerTest extends TestCase
         $this->sendWebhook('checkout.session.completed', $payload)->assertOk();
         $this->sendWebhook('checkout.session.completed', $payload)->assertOk();
 
+        $this->artisan('emails:deliver')->assertSuccessful();
         Mail::assertSent(OrderPaidMail::class, 1);
     }
 
@@ -215,6 +216,7 @@ class StripeWebhookControllerTest extends TestCase
         $this->assertSame('failed', $order->payment_status);
         $this->assertSame('cancelled', $order->status);
         $this->assertSame(10, $product->stock_quantity);
+        $this->artisan('emails:deliver')->assertSuccessful();
         Mail::assertSent(OrderCancelledMail::class, 1);
     }
 
@@ -295,6 +297,7 @@ class StripeWebhookControllerTest extends TestCase
         $this->assertSame('refunded', $order->payment_status);
         $this->assertSame('cancelled', $order->status);
         $this->assertSame(10, $product->stock_quantity);
+        $this->artisan('emails:deliver')->assertSuccessful();
         Mail::assertSent(OrderCancelledMail::class, 1);
     }
 

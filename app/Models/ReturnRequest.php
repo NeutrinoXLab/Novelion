@@ -2,12 +2,11 @@
 
 namespace App\Models;
 
-use App\Mail\RefundStatusMail;
+use App\Services\TransactionalEmails;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 
 class ReturnRequest extends Model
 {
@@ -15,7 +14,7 @@ class ReturnRequest extends Model
     {
         static::updated(function (ReturnRequest $return): void {
             if ($return->wasChanged('refund_status') && $return->refund_status) {
-                Mail::to($return->order->email)->send(new RefundStatusMail($return->order, $return->refund_status, $return->refund_amount));
+                app(TransactionalEmails::class)->refund($return);
             }
         });
     }

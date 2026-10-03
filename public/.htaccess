@@ -5,6 +5,13 @@
 
     RewriteEngine On
 
+    # Canonical storefront on LiteSpeed with TLS terminated at this server.
+    # Restrict to production domains so local HTTP development is unaffected.
+    RewriteCond %{HTTP_HOST} ^(?:www\.)?novelions\.ro(?::[0-9]+)?$ [NC]
+    RewriteCond %{HTTPS} !=on [OR]
+    RewriteCond %{HTTP_HOST} !^novelions\.ro$ [NC]
+    RewriteRule ^ https://novelions.ro%{REQUEST_URI} [R=308,L]
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]

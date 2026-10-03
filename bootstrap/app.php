@@ -13,6 +13,9 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
 
+        $middleware->trustProxies(headers: Request::HEADER_X_FORWARDED_PROTO);
+        $middleware->trustHosts(at: ['^novelions\.ro$', '^www\.novelions\.ro$'], subdomains: false);
+
         $middleware->validateCsrfTokens(
             except: [
                 'stripe/webhook',

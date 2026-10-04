@@ -8,6 +8,7 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
+use Illuminate\Support\Facades\DB;
 
 class EditReturnRequest extends EditRecord
 {
@@ -138,14 +139,27 @@ class EditReturnRequest extends EditRecord
                     if (! in_array($data['refund_status'], ['initiated', 'processing', 'completed', 'failed'], true)) {
                         throw new \RuntimeException('Stare invalidă.');
                     }
-                    $this->record->update([
-                        'refund_status' => $data['refund_status'],
-                        'status' => $data['refund_status'] === 'completed' ? 'refunded' : 'received',
-                        'refunded_at' => $data['refund_status'] === 'completed' ? now() : null,
-                    ]);
-                    if ($data['refund_status'] === 'completed') {
-                        $this->record->restoreStock();
-                    }
+                    DB::transaction(function () use ($data): void {
+                        $return = $this->record->newQuery()->whereKey($this->record->getKey())
+                            ->lockForUpdate()->firstOrFail();
+                        $completed = $data['refund_status'] === 'completed';
+
+                        if ($return->refund_method !== 'bank_transfer' || $return->bank_transfer_accepted_at === null
+                            || ($return->status !== 'received'
+                                && ! ($completed && $return->status === 'refunded' && $return->refund_status === 'completed'))) {
+                            throw new \RuntimeException('Returul nu mai permite înregistrarea transferului bancar.');
+                        }
+
+                        $return->update([
+                            'refund_status' => $data['refund_status'],
+                            'status' => $completed ? 'refunded' : 'received',
+                            'refunded_at' => $completed ? ($return->refunded_at ?? now()) : null,
+                        ]);
+                        if ($completed) {
+                            $return->restoreStock();
+                        }
+                    });
+                    $this->record->refresh();
                     Notification::make()->title('Starea transferului a fost înregistrată.')->success()->send();
                 }),
         ];

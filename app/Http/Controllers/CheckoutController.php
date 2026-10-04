@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\Order;
 use App\Services\CartService;
+use App\Services\CheckoutAttempts;
 use App\Services\OrderService;
 use App\Services\StripeService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class CheckoutController extends Controller
 {
@@ -35,7 +37,11 @@ class CheckoutController extends Controller
             return redirect()->route('cart.index')->with('error', 'Livrarea nu poate fi calculată pentru acest coș. Verifică din nou mai târziu sau contactează-ne.');
         }
 
+        $attempt = app(CheckoutAttempts::class)->issue($cart);
+
         return view('checkout.index', [
+            'checkoutToken' => $attempt->token,
+            'checkoutOrder' => $attempt->order_id ? Order::findOrFail($attempt->order_id) : null,
             'items' => $cart->getCart(),
 
             // Doar produsele
@@ -55,15 +61,8 @@ class CheckoutController extends Controller
      */
     public function store(Request $request, CartService $cart)
     {
-        if ($cart->count() === 0) {
-            return redirect()->route('cart.index');
-        }
-
-        if (! $cart->canShip()) {
-            return redirect()->route('cart.index')->with('error', 'Livrarea nu poate fi calculată; comanda nu poate fi finalizată.');
-        }
-
         $validated = $request->validate([
+            'checkout_token' => 'required|uuid',
 
             /*
             |--------------------------------------------------------------------------
@@ -172,10 +171,15 @@ class CheckoutController extends Controller
             |--------------------------------------------------------------------------
             */
 
-            $order = $this->orderService->create(
+            $order = app(CheckoutAttempts::class)->order(
+                $validated['checkout_token'],
                 $validated,
                 $cart
             );
+
+            if ($order->status === 'cancelled' || in_array($order->payment_status, ['failed', 'refunded'], true)) {
+                return redirect()->route('my-orders.show', $order);
+            }
 
             /*
             |--------------------------------------------------------------------------
@@ -183,7 +187,7 @@ class CheckoutController extends Controller
             |--------------------------------------------------------------------------
             */
 
-            if ($validated['payment_method'] === 'cash') {
+            if ($order->payment_method === 'cash' || $order->payment_status === 'paid') {
 
                 return redirect()
                     ->route('checkout.success', $order);
@@ -195,25 +199,22 @@ class CheckoutController extends Controller
             |--------------------------------------------------------------------------
             */
 
-            $session = $this->stripeService
-                ->createCheckoutSession($order);
+            $session = app(CheckoutAttempts::class)->stripeSession($order);
 
             return redirect($session->url);
 
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Exception $e) {
 
             report($e);
 
             /*
             |--------------------------------------------------------------------------
-            | Dacă plata Stripe nu poate fi inițiată,
-            | eliberăm stocul rezervat pentru comandă.
+            | Un timeout nu dovedește că Stripe nu a creat sesiunea.
+            | Păstrăm comanda și rezervarea pentru retry/reconciliere.
             |--------------------------------------------------------------------------
             */
-
-            if (isset($order)) {
-                $this->orderService->markAsFailed($order);
-            }
 
             return back()
                 ->withInput()

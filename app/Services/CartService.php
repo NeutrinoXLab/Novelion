@@ -76,6 +76,7 @@ class CartService
 
         $cart = session()->get($this->sessionKey, []);
 
+        app(CheckoutAttempts::class)->retire();
         if (isset($cart[$product->id])) {
 
             $cart[$product->id]['quantity'] += $quantity;
@@ -100,6 +101,9 @@ class CartService
 
         if (isset($cart[$product->id])) {
 
+            if ($cart[$product->id]['quantity'] !== max(1, $quantity)) {
+                app(CheckoutAttempts::class)->retire();
+            }
             $cart[$product->id]['quantity'] = max(1, $quantity);
         }
 
@@ -113,7 +117,10 @@ class CartService
     {
         $cart = session()->get($this->sessionKey, []);
 
-        unset($cart[$product->id]);
+        if (isset($cart[$product->id])) {
+            app(CheckoutAttempts::class)->retire();
+            unset($cart[$product->id]);
+        }
 
         session()->put($this->sessionKey, $cart);
     }
@@ -123,6 +130,9 @@ class CartService
      */
     public function clear(): void
     {
+        if (session()->has($this->sessionKey)) {
+            app(CheckoutAttempts::class)->retire();
+        }
         session()->forget($this->sessionKey);
     }
 

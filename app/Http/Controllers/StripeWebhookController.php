@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CheckoutAttempt;
 use App\Models\Order;
 use App\Models\ReturnRequest;
+use App\Services\CheckoutAttempts;
 use App\Services\OrderService;
 use App\Services\TransactionalEmails;
 use Illuminate\Http\Request;
@@ -55,7 +57,7 @@ class StripeWebhookController extends Controller
         ], true)) {
             $session = $event->data->object;
 
-            $order = $this->findOrderForCheckoutSession($session);
+            $order = $this->findOrderForCheckoutSession($session, $event->type);
 
             if (($session->payment_status ?? null) === 'paid'
                 && (! $order || ! $this->matchesPaidCheckout($order, $session))) {
@@ -112,7 +114,7 @@ class StripeWebhookController extends Controller
         if ($event->type === 'checkout.session.expired') {
             $session = $event->data->object;
 
-            $order = $this->findOrderForCheckoutSession($session);
+            $order = $this->findOrderForCheckoutSession($session, $event->type);
 
             if ($order) {
                 if (! $order->stripe_session_id) {
@@ -137,7 +139,7 @@ class StripeWebhookController extends Controller
          */
         if ($event->type === 'checkout.session.async_payment_failed') {
             $session = $event->data->object;
-            $order = $this->findOrderForCheckoutSession($session);
+            $order = $this->findOrderForCheckoutSession($session, $event->type);
 
             if ($order) {
                 $this->orderService->markAsFailed($order);
@@ -433,7 +435,7 @@ class StripeWebhookController extends Controller
     /**
      * Găsește numai comenzile create pentru plata Stripe.
      */
-    private function findOrderForCheckoutSession(object $session): ?Order
+    private function findOrderForCheckoutSession(object $session, string $eventType): ?Order
     {
         $orderId = $session->metadata->order_id ?? null;
         $sessionId = $session->id ?? null;
@@ -442,11 +444,82 @@ class StripeWebhookController extends Controller
             return null;
         }
 
-        return Order::query()
-            ->whereKey((int) $orderId)
-            ->where('payment_method', 'stripe')
-            ->where('stripe_session_id', $sessionId)
-            ->first();
+        // Bound legacy sessions keep their existing strict ID lookup. Recovery is
+        // available only for attempts whose correlation data committed before HTTP.
+        $bound = Order::query()->whereKey((int) $orderId)->where('payment_method', 'stripe')
+            ->where('stripe_session_id', $sessionId)->first();
+        if ($bound) {
+            return $bound;
+        }
+        $token = $session->metadata->checkout_attempt ?? null;
+        if (! is_string($token) || $sessionId === '') {
+            return null;
+        }
+
+        return DB::transaction(function () use ($token, $orderId, $sessionId, $session, $eventType): ?Order {
+            // Same lock order as checkout. Wait for its save/rollback, then inspect
+            // current values rather than a snapshot read made before it completed.
+            $attempt = CheckoutAttempt::query()->where('token', $token)->lockForUpdate()->first();
+            if (! $attempt || (string) $attempt->order_id !== (string) $orderId
+                || ! $attempt->stripe_started_at || ! $attempt->stripe_parameters) {
+                return null;
+            }
+            $order = Order::query()->whereKey($attempt->order_id)->lockForUpdate()->firstOrFail();
+            $parameters = $attempt->stripe_parameters;
+            $metadata = $parameters['metadata'] ?? [];
+            $fingerprint = $metadata['checkout_fingerprint'] ?? null;
+            unset($parameters['metadata']['checkout_fingerprint']);
+            if (! is_string($fingerprint)
+                || ! hash_equals($fingerprint, CheckoutAttempts::stripeFingerprint($parameters))
+                || ($metadata['checkout_attempt'] ?? null) !== $attempt->token
+                || ($metadata['order_id'] ?? null) !== (string) $order->id
+                || ($metadata['user_id'] ?? null) !== (string) $attempt->user_id
+                || ($metadata['request_hash'] ?? null) !== $attempt->request_hash
+                || $order->payment_method !== 'stripe'
+                || (string) $order->user_id !== (string) $attempt->user_id
+                || ($session->client_reference_id ?? null) !== $attempt->token
+                || ($session->object ?? null) !== 'checkout.session'
+                || ($session->mode ?? null) !== 'payment'
+                || ($session->currency ?? null) !== 'ron'
+                || ($session->status ?? null) !== ($eventType === 'checkout.session.expired' ? 'expired' : 'complete')
+                || ! in_array($session->payment_status ?? null, ['paid', 'unpaid'], true)
+                || (($session->status ?? null) === 'expired' && ($session->payment_status ?? null) !== 'unpaid')
+                || ($order->stripe_session_id !== null && $order->stripe_session_id !== $sessionId)) {
+                return null;
+            }
+            foreach ($metadata as $key => $value) {
+                if (($session->metadata->{$key} ?? null) !== $value) {
+                    return null;
+                }
+            }
+            $expected = 0;
+            foreach ($parameters['line_items'] as $item) {
+                if ($item['price_data']['currency'] !== 'ron') {
+                    return null;
+                }
+                $expected += $item['price_data']['unit_amount'] * $item['quantity'];
+            }
+            $orderCents = $order->items->sum(fn ($item): int => (int) round((float) $item->price * 100) * $item->quantity)
+                + (int) round((float) $order->shipping_cost * 100);
+            if (! is_int($session->amount_total ?? null) || $session->amount_total !== $expected
+                || $expected !== $orderCents || $expected !== (int) round((float) $order->total * 100)
+                || Order::query()->where('stripe_session_id', $sessionId)->whereKeyNot($order->id)->exists()) {
+                return null;
+            }
+            if (($session->payment_status ?? null) === 'paid' && ! $this->matchesRecoveredPayment($order, $session)) {
+                return null;
+            }
+            $order->update(['stripe_session_id' => $sessionId]);
+
+            return $order;
+        });
+    }
+
+    private function matchesRecoveredPayment(Order $order, object $session): bool
+    {
+        return is_string($session->payment_intent ?? null) && $session->payment_intent !== ''
+            && ($order->stripe_payment_intent === null || $order->stripe_payment_intent === $session->payment_intent)
+            && ! Order::query()->where('stripe_payment_intent', $session->payment_intent)->whereKeyNot($order->id)->exists();
     }
 
     private function matchesPaidCheckout(Order $order, object $session): bool

@@ -14,10 +14,20 @@ class StripeService
     /**
      * Creează sesiunea Stripe Checkout.
      */
-    public function createCheckoutSession(Order $order): Session
+    public function createCheckoutSession(Order $order, ?array $parameters = null, ?string $idempotencyKey = null): Session
     {
         Stripe::setApiKey(config('services.stripe.secret'));
 
+        $session = Session::create($parameters ?? $this->checkoutParameters($order), [
+            'idempotency_key' => $idempotencyKey ?? 'novelion-order-checkout-'.$order->id,
+        ]);
+        $order->update(['stripe_session_id' => $session->id]);
+
+        return $session;
+    }
+
+    public function checkoutParameters(Order $order): array
+    {
         $lineItems = [];
 
         /*
@@ -76,7 +86,7 @@ class StripeService
         |--------------------------------------------------------------------------
         */
 
-        $session = Session::create([
+        return [
             'mode' => 'payment',
 
             'line_items' => $lineItems,
@@ -94,13 +104,7 @@ class StripeService
             'metadata' => [
                 'order_id' => $order->id,
             ],
-        ]);
-
-        $order->update([
-            'stripe_session_id' => $session->id,
-        ]);
-
-        return $session;
+        ];
     }
 
     /**

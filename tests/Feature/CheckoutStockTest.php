@@ -7,6 +7,8 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\ShippingRate;
 use App\Models\User;
+use App\Services\CartService;
+use App\Services\CheckoutAttempts;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -40,7 +42,10 @@ class CheckoutStockTest extends TestCase
                 'first' => ['id' => $product->id, 'quantity' => 4],
                 'second' => ['id' => $product->id, 'quantity' => 4],
             ]])
-            ->post(route('checkout.store'), $this->checkoutData($user))
+            ->get(route('checkout.index'));
+        $this->post(route('checkout.store'), array_merge($this->checkoutData($user), [
+            'checkout_token' => app(CheckoutAttempts::class)->issue(app(CartService::class))->token,
+        ]))
             ->assertSessionHas('error');
 
         $this->assertSame(6, $product->fresh()->stock_quantity);
@@ -67,7 +72,10 @@ class CheckoutStockTest extends TestCase
                 'first' => ['id' => $product->id, 'quantity' => 2],
                 'second' => ['id' => $product->id, 'quantity' => 2],
             ]])
-            ->post(route('checkout.store'), $this->checkoutData($user))
+            ->get(route('checkout.index'));
+        $this->post(route('checkout.store'), array_merge($this->checkoutData($user), [
+            'checkout_token' => app(CheckoutAttempts::class)->issue(app(CartService::class))->token,
+        ]))
             ->assertRedirect();
 
         $order = Order::firstOrFail();
@@ -103,7 +111,9 @@ class CheckoutStockTest extends TestCase
 
         $this->actingAs($user)
             ->withSession(['cart' => [$product->id => ['id' => $product->id, 'quantity' => 1]]])
-            ->post(route('checkout.store'), $data)
+            ->get(route('checkout.index'));
+        $data['checkout_token'] = app(CheckoutAttempts::class)->issue(app(CartService::class))->token;
+        $this->post(route('checkout.store'), $data)
             ->assertRedirect();
 
         $order = Order::firstOrFail();

@@ -15,6 +15,8 @@ use App\Models\ReturnRequest;
 use App\Models\ShippingRate;
 use App\Models\TransactionalEmail;
 use App\Models\User;
+use App\Services\CartService;
+use App\Services\CheckoutAttempts;
 use App\Services\InvoiceService;
 use App\Services\OrderService;
 use App\Services\StripeService;
@@ -59,7 +61,9 @@ class TransactionalEmailFailureTest extends TestCase
 
         $this->actingAs($user)->withSession(['cart' => [
             $product->id => ['id' => $product->id, 'quantity' => 2],
-        ]])->post(route('checkout.store'), [
+        ]])->get(route('checkout.index'));
+        $this->post(route('checkout.store'), [
+            'checkout_token' => app(CheckoutAttempts::class)->issue(app(CartService::class))->token,
             'customer_type' => 'individual', 'first_name' => 'Test', 'last_name' => 'Client',
             'email' => $user->email, 'phone' => '0700000000', 'county' => 'Prahova',
             'city' => 'Ploiesti', 'address' => 'Test street', 'payment_method' => 'cash',

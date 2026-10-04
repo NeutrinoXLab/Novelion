@@ -15,6 +15,17 @@
         <form action="{{ route('checkout.store') }}" method="POST">
 
             @csrf
+            <input type="hidden" name="checkout_token" value="{{ $checkoutToken }}">
+            @error('checkout_token')
+                <p class="mb-6 text-red-700" role="alert">{{ $message }}</p>
+            @enderror
+            @if($checkoutOrder)
+                <p class="mb-6 text-slate-700" role="status">
+                    Există deja o comandă pentru acest coș, în valoare de {{ number_format($checkoutOrder->total, 2) }} lei.
+                    Finalizarea cu aceleași date reia această comandă.
+                    <a href="{{ route('my-orders.show', $checkoutOrder) }}" class="underline">Vezi comanda</a>
+                </p>
+            @endif
 
             <div class="grid lg:grid-cols-3 gap-10">
 

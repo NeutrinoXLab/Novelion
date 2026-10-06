@@ -19,6 +19,9 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
+        <env name="STRIPE_MODE" value="test" force="true"/>
+        <env name="STRIPE_SECRET" value="sk_test_suite_fake" force="true"/>
+        <env name="STRIPE_WEBHOOK_SECRET" value="whsec_suite_fake" force="true"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>

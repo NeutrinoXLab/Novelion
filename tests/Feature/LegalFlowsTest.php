@@ -12,17 +12,17 @@ use App\Models\ShippingRate;
 use App\Models\User;
 use App\Services\StripeService;
 use App\Services\WithdrawalDeadline;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Stripe\ApiRequestor;
 use Stripe\HttpClient\ClientInterface;
+use Tests\Concerns\UsesCommittedDatabase;
 use Tests\TestCase;
 
 class LegalFlowsTest extends TestCase
 {
-    use RefreshDatabase;
+    use UsesCommittedDatabase;
 
     protected function tearDown(): void
     {
@@ -47,7 +47,10 @@ class LegalFlowsTest extends TestCase
             {
                 $this->params = $params;
 
-                return [json_encode(['id' => 're_partial', 'object' => 'refund', 'payment_intent' => 'pi_partial', 'status' => 'pending']), 200, []];
+                return [json_encode([
+                    'id' => 're_partial', 'object' => 'refund', 'livemode' => false, 'payment_intent' => 'pi_partial', 'status' => 'pending',
+                    'currency' => 'ron', 'amount' => (int) $params['amount'], 'metadata' => $params['metadata'],
+                ]), 200, []];
             }
         };
         ApiRequestor::setHttpClient($client);

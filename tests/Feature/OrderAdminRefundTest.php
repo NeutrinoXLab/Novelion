@@ -8,16 +8,16 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Livewire\Livewire;
 use Stripe\ApiRequestor;
 use Stripe\HttpClient\ClientInterface;
+use Tests\Concerns\UsesCommittedDatabase;
 use Tests\TestCase;
 
 class OrderAdminRefundTest extends TestCase
 {
-    use RefreshDatabase;
+    use UsesCommittedDatabase;
 
     protected function setUp(): void
     {
@@ -89,8 +89,12 @@ class OrderAdminRefundTest extends TestCase
                 return [json_encode([
                     'id' => 're_admin_test',
                     'object' => 'refund',
+                    'livemode' => false,
                     'payment_intent' => 'pi_admin_test',
                     'status' => 'succeeded',
+                    'currency' => 'ron',
+                    'amount' => 40000,
+                    'metadata' => $params['metadata'],
                 ]), 200, []];
             }
         };

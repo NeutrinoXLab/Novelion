@@ -389,8 +389,9 @@ class TransactionalEmailFailureTest extends TestCase
 
     private function returnRequest(Order $order): ReturnRequest
     {
+        $order->update(['user_id' => User::factory()->create()->id]);
         $return = ReturnRequest::create([
-            'order_id' => $order->id, 'user_id' => User::factory()->create()->id,
+            'order_id' => $order->id, 'user_id' => $order->user_id,
             'reason' => 'F1 test', 'status' => 'received', 'requested_at' => now(), 'refund_amount' => 200,
         ]);
         $return->items()->create([
@@ -423,7 +424,8 @@ class TransactionalEmailFailureTest extends TestCase
 
     private function webhook(string $type, array $object)
     {
-        $payload = json_encode(['id' => 'evt_f1_'.uniqid(), 'object' => 'event', 'type' => $type, 'data' => ['object' => $object]]);
+        $payload = json_encode(['id' => 'evt_f1_'.uniqid(), 'object' => 'event', 'livemode' => false,
+            'type' => $type, 'data' => ['object' => array_replace(['livemode' => false], $object)]]);
         $timestamp = time();
         $signature = hash_hmac('sha256', $timestamp.'.'.$payload, 'whsec_f1_test');
 
@@ -438,7 +440,13 @@ class TransactionalEmailFailureTest extends TestCase
         {
             public function request($method, $absUrl, $headers, $params, $hasFile, $apiMode = 'v1', $maxNetworkRetries = null): array
             {
-                return [json_encode(['id' => 're_f1', 'object' => 'refund', 'status' => 'succeeded']), 200, []];
+                return [json_encode([
+                    'id' => 're_f1', 'object' => 'refund', 'livemode' => false, 'status' => 'succeeded',
+                    'payment_intent' => $params['payment_intent'], 'currency' => 'ron',
+                    'amount' => $params['amount'] ?? (int) round((float) Order::query()
+                        ->where('stripe_payment_intent', $params['payment_intent'])->firstOrFail()->total * 100),
+                    'metadata' => $params['metadata'],
+                ]), 200, []];
             }
         });
     }

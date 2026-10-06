@@ -487,7 +487,8 @@ class CheckoutIdempotencyTest extends TestCase
 
     private function recoveryWebhook(array $session, string $type = 'checkout.session.expired')
     {
-        $payload = json_encode(['id' => 'evt_a1', 'object' => 'event', 'type' => $type, 'data' => ['object' => $session]], JSON_THROW_ON_ERROR);
+        $payload = json_encode(['id' => 'evt_a1', 'object' => 'event', 'livemode' => false, 'type' => $type,
+            'data' => ['object' => array_replace(['livemode' => false], $session)]], JSON_THROW_ON_ERROR);
         $timestamp = time();
         $signature = hash_hmac('sha256', $timestamp.'.'.$payload, 'whsec_f2');
 
@@ -522,8 +523,8 @@ class CheckoutIdempotencyTest extends TestCase
     private function paidWebhook()
     {
         $order = Order::firstOrFail();
-        $payload = json_encode(['id' => 'evt_f2', 'object' => 'event', 'type' => 'checkout.session.completed', 'data' => ['object' => [
-            'id' => $order->stripe_session_id, 'object' => 'checkout.session', 'payment_intent' => 'pi_f2',
+        $payload = json_encode(['id' => 'evt_f2', 'object' => 'event', 'livemode' => false, 'type' => 'checkout.session.completed', 'data' => ['object' => [
+            'id' => $order->stripe_session_id, 'object' => 'checkout.session', 'livemode' => false, 'payment_intent' => 'pi_f2',
             'payment_status' => 'paid', 'currency' => 'ron', 'amount_total' => 20000,
             'metadata' => ['order_id' => (string) $order->id],
         ]]]);

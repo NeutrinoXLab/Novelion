@@ -11,6 +11,7 @@ use App\Models\Product;
 use App\Models\ReturnRequest;
 use App\Models\User;
 use App\Services\StripeService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Stripe\ApiRequestor;
 use Stripe\HttpClient\ClientInterface;
@@ -29,6 +30,7 @@ class StripeWebhookControllerTest extends TestCase
 
         config([
             'logging.default' => 'null',
+            'services.stripe.secret' => 'sk_test_webhook_fake',
             'services.stripe.webhook_secret' => self::WEBHOOK_SECRET,
         ]);
 
@@ -201,9 +203,35 @@ class StripeWebhookControllerTest extends TestCase
 
         $payload = [
             'id' => 'cs_test_async_failed',
+            'object' => 'checkout.session',
+            'livemode' => false,
+            'mode' => 'payment',
+            'status' => 'complete',
             'payment_status' => 'unpaid',
+            'payment_intent' => 'pi_async_failed',
+            'amount_total' => 40000,
+            'currency' => 'ron',
             'metadata' => ['order_id' => (string) $order->id],
         ];
+        ApiRequestor::setHttpClient(new class($payload) implements ClientInterface
+        {
+            public function __construct(private array $session) {}
+
+            public function request($method, $url, $headers, $params, $hasFile, $apiMode = 'v1', $maxNetworkRetries = null): array
+            {
+                if (DB::transactionLevel() !== 0) {
+                    throw new \LogicException('Async HTTP under transaction');
+                }
+                $data = match (parse_url($url, PHP_URL_PATH)) {
+                    '/v1/checkout/sessions/cs_test_async_failed' => $this->session,
+                    '/v1/payment_intents/pi_async_failed' => ['id' => 'pi_async_failed', 'object' => 'payment_intent', 'livemode' => false, 'amount' => 40000, 'amount_received' => 0, 'currency' => 'ron', 'status' => 'requires_payment_method', 'latest_charge' => 'ch_async_failed', 'last_payment_error' => ['charge' => 'ch_async_failed']],
+                    '/v1/charges/ch_async_failed' => ['id' => 'ch_async_failed', 'object' => 'charge', 'livemode' => false, 'payment_intent' => 'pi_async_failed', 'status' => 'failed', 'paid' => false, 'amount' => 40000, 'currency' => 'ron', 'created' => time() - 60],
+                    default => throw new \LogicException('Unexpected async HTTP'),
+                };
+
+                return [json_encode($data), 200, []];
+            }
+        });
 
         $this->sendWebhook('checkout.session.async_payment_failed', $payload)
             ->assertOk();
@@ -348,7 +376,12 @@ class StripeWebhookControllerTest extends TestCase
             'reason' => 'Test return',
             'status' => 'received',
             'requested_at' => now(),
+            'refund_amount' => 400,
         ]);
+
+        $return->items()->create(['order_item_id' => $order->items()->firstOrFail()->id,
+            'quantity' => 4, 'unit_price' => 100, 'line_refund_amount' => 400]);
+        $order->update(['user_id' => $return->user_id]);
 
         $this->fakeRefundList([[
             'id' => 're_return',
@@ -431,6 +464,12 @@ class StripeWebhookControllerTest extends TestCase
 
     private function fakeRefundList(array $refunds): void
     {
+        $order = Order::query()->firstOrFail();
+        $refunds = array_map(fn ($refund) => $refund + [
+            'livemode' => false,
+            'payment_intent' => $order->stripe_payment_intent, 'currency' => 'ron',
+            'amount' => (int) round((float) $order->total * 100), 'status' => 'succeeded',
+        ], $refunds);
         ApiRequestor::setHttpClient(new class($refunds) implements ClientInterface
         {
             public function __construct(private array $refunds) {}
@@ -447,7 +486,8 @@ class StripeWebhookControllerTest extends TestCase
                 return [
                     json_encode([
                         'object' => 'list',
-                        'data' => $this->refunds,
+                        'has_more' => false,
+                        'data' => array_map(fn ($refund) => $refund + ['charge' => $params['charge']], $this->refunds),
                     ]),
                     200,
                     [],
@@ -511,8 +551,10 @@ class StripeWebhookControllerTest extends TestCase
         $payload = json_encode([
             'id' => 'evt_'.uniqid(),
             'object' => 'event',
+            'livemode' => false,
+            'created' => time(),
             'type' => $type,
-            'data' => ['object' => $object],
+            'data' => ['object' => array_replace(['livemode' => false], $object)],
         ]);
 
         $timestamp = time();

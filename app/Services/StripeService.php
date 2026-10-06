@@ -5,7 +5,12 @@ namespace App\Services;
 use App\Models\Order;
 use App\Models\ReturnRequest;
 use Illuminate\Support\Facades\DB;
+use Stripe\ApiRequestor;
+use Stripe\Charge;
 use Stripe\Checkout\Session;
+use Stripe\Event;
+use Stripe\HttpClient\CurlClient;
+use Stripe\PaymentIntent;
 use Stripe\Refund;
 use Stripe\Stripe;
 
@@ -16,6 +21,7 @@ class StripeService
      */
     public function createCheckoutSession(Order $order, ?array $parameters = null, ?string $idempotencyKey = null): Session
     {
+        app(StripeModePolicy::class)->livemode();
         Stripe::setApiKey(config('services.stripe.secret'));
 
         $session = Session::create($parameters ?? $this->checkoutParameters($order), [
@@ -112,6 +118,7 @@ class StripeService
      */
     public function refundPayment(Order $order): Refund
     {
+        app(StripeModePolicy::class)->livemode();
         if ($order->payment_method !== 'stripe') {
             throw new \RuntimeException('Numai comenzile plătite prin Stripe pot fi rambursate prin Stripe.');
         }
@@ -135,24 +142,20 @@ class StripeService
             );
         }
 
+        if (DB::transactionLevel() !== 0) {
+            throw new \LogicException('Stripe refund HTTP cannot run inside a DB transaction.');
+        }
+
+        // A lost POST reply must not leave recovery waiting for the weekly stable scan.
+        Order::query()->whereKey($order->id)->update(['stripe_reconcile_next_at' => now(), 'stripe_reconcile_claim' => null]);
+
         $refund = Refund::create(
             ['payment_intent' => $order->stripe_payment_intent,
                 'metadata' => ['order_id' => (string) $order->id]],
             ['idempotency_key' => 'order-refund-'.$order->id]
         );
 
-        DB::transaction(function () use ($order, $refund): void {
-            $order->update([
-                'stripe_refund_id' => $refund->id,
-                'refund_status' => ($refund->status ?? null) === 'succeeded' ? 'completed' : 'processing',
-                'refunded_at' => ($refund->status ?? null) === 'succeeded' ? now() : null,
-            ]);
-
-            if (($refund->status ?? null) === 'succeeded') {
-                $order->update(['payment_status' => 'refunded', 'status' => 'cancelled']);
-                app(OrderService::class)->restoreStock($order);
-            }
-        });
+        $this->applyCreatedRefund($refund, $order);
 
         return $refund;
     }
@@ -162,6 +165,7 @@ class StripeService
      */
     public function refundReturn(ReturnRequest $return): Refund
     {
+        app(StripeModePolicy::class)->livemode();
         Stripe::setApiKey(config('services.stripe.secret'));
 
         $return->loadMissing('order');
@@ -204,6 +208,13 @@ class StripeService
             throw new \RuntimeException('Returul nu are o sumă validă de rambursat.');
         }
 
+        if (DB::transactionLevel() !== 0) {
+            throw new \LogicException('Stripe refund HTTP cannot run inside a DB transaction.');
+        }
+
+        // A lost POST reply must not leave recovery waiting for the weekly stable scan.
+        Order::query()->whereKey($order->id)->update(['stripe_reconcile_next_at' => now(), 'stripe_reconcile_claim' => null]);
+
         $refund = Refund::create(
             [
                 'payment_intent' => $order->stripe_payment_intent,
@@ -222,19 +233,85 @@ class StripeService
         /*
          * Cererea creată nu înseamnă că procesatorul a finalizat refund-ul.
          */
-        DB::transaction(function () use ($return, $refund): void {
-            $return->update([
-                'stripe_refund_id' => $refund->id,
-                'refund_status' => in_array($refund->status ?? null, ['succeeded'], true) ? 'completed' : 'processing',
-                'status' => ($refund->status ?? null) === 'succeeded' ? 'refunded' : 'received',
-                'refunded_at' => ($refund->status ?? null) === 'succeeded' ? now() : null,
-            ]);
-
-            if (($refund->status ?? null) === 'succeeded') {
-                $return->restoreStock();
-            }
-        });
+        $this->applyCreatedRefund($refund, $order, $return);
 
         return $refund;
+    }
+
+    public function read(string $resource, string $id): object
+    {
+        $this->assertReadOutsideTransaction();
+        Stripe::setApiKey(config('services.stripe.secret'));
+        $class = match ($resource) {
+            'session' => Session::class,
+            'payment_intent' => PaymentIntent::class,
+            'charge' => Charge::class,
+            'refund' => Refund::class,
+            default => throw new \InvalidArgumentException('Unknown Stripe read resource.'),
+        };
+
+        return $class::retrieve($id, ['max_network_retries' => 0]);
+    }
+
+    public function page(string $resource, array $parameters): object
+    {
+        $this->assertReadOutsideTransaction();
+        Stripe::setApiKey(config('services.stripe.secret'));
+
+        return match ($resource) {
+            'sessions' => Session::all($parameters, ['max_network_retries' => 0]),
+            'refunds' => Refund::all($parameters, ['max_network_retries' => 0]),
+            'events' => Event::all($parameters, ['max_network_retries' => 0]),
+            default => throw new \InvalidArgumentException('Unknown Stripe list resource.'),
+        };
+    }
+
+    public function allChargeRefunds(string $charge): array
+    {
+        $all = [];
+        $after = null;
+        do {
+            $page = $this->page('refunds', array_filter(['charge' => $charge, 'limit' => 100, 'starting_after' => $after]));
+            $data = $page->data ?? null;
+            if (! is_array($data) || ! is_bool($page->has_more ?? null)
+                || ($page->has_more && ($data === [] || end($data)->id === $after))) {
+                throw new \RuntimeException('Invalid Stripe pagination.');
+            }
+            foreach ($data as $refund) {
+                $all[$refund->id] = $refund;
+                $after = $refund->id;
+                if (count($all) > 1000) {
+                    throw new \RuntimeException('Refund scan exceeds operational limit.');
+                }
+            }
+        } while ($page->has_more);
+
+        return array_values($all);
+    }
+
+    private function assertReadOutsideTransaction(): void
+    {
+        if (DB::transactionLevel() !== 0) {
+            throw new \LogicException('Stripe GET cannot run inside a DB transaction.');
+        }
+        app(StripeModePolicy::class)->livemode();
+        $client = ApiRequestor::httpClient();
+        if ($client instanceof CurlClient) {
+            $client->setConnectTimeout((int) config('stripe_reconciliation.connect_timeout'));
+            $client->setTimeout((int) config('stripe_reconciliation.request_timeout'));
+        }
+    }
+
+    private function applyCreatedRefund(Refund $refund, Order $order, ?ReturnRequest $return = null): void
+    {
+        if (($refund->metadata->order_id ?? null) !== (string) $order->id
+            || ($refund->metadata->return_request_id ?? null) !== ($return ? (string) $return->id : null)
+            || ($refund->payment_intent ?? null) !== $order->stripe_payment_intent) {
+            throw new \RuntimeException('Stripe refund response correlation requires manual review.');
+        }
+        $result = app(StripeStateApplier::class)->refund($refund);
+        if ($result === 'manual_review') {
+            throw new \RuntimeException('Stripe refund response requires manual review.');
+        }
     }
 }

@@ -85,6 +85,12 @@ class Order extends Model
         'stripe_session_id',
         'stripe_payment_intent',
         'late_stripe_payment_at',
+        'stripe_reconcile_claim',
+        'stripe_reconcile_next_at',
+        'stripe_reconcile_checked_at',
+        'stripe_reconcile_failures',
+        'stripe_reconcile_result',
+        'stripe_reconcile_cursor',
         'stripe_refund_id',
         'refund_status',
         'refunded_at',
@@ -102,6 +108,9 @@ class Order extends Model
     ];
 
     protected $casts = [
+        'stripe_reconcile_next_at' => 'datetime',
+        'stripe_reconcile_checked_at' => 'datetime',
+        'stripe_reconcile_cursor' => 'array',
         'delivered_at' => 'datetime',
         'late_stripe_payment_at' => 'datetime',
         'refunded_at' => 'datetime',

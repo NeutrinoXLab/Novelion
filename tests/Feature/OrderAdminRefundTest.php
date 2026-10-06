@@ -3,13 +3,18 @@
 namespace Tests\Feature;
 
 use App\Filament\Resources\Orders\Pages\EditOrder;
+use App\Filament\Resources\Orders\Pages\ViewOrder;
 use App\Models\Category;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\User;
+use App\Services\AdminOrderLifecycle;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
+use PHPUnit\Framework\Assert;
 use Stripe\ApiRequestor;
 use Stripe\HttpClient\ClientInterface;
 use Tests\Concerns\UsesCommittedDatabase;
@@ -85,6 +90,14 @@ class OrderAdminRefundTest extends TestCase
                 $maxNetworkRetries = null,
             ): array {
                 $this->requests++;
+                Assert::assertSame(0, DB::transactionLevel());
+                Assert::assertSame('initiated', Order::firstOrFail()->refund_status);
+                try {
+                    app(AdminOrderLifecycle::class)->transition(Order::firstOrFail(), 'shipped');
+                    Assert::fail('Refund intent must fence fulfilment before HTTP returns.');
+                } catch (ValidationException $exception) {
+                    Assert::assertArrayHasKey('lifecycle', $exception->errors());
+                }
 
                 return [json_encode([
                     'id' => 're_admin_test',
@@ -101,8 +114,9 @@ class OrderAdminRefundTest extends TestCase
         ApiRequestor::setHttpClient($client);
 
         $this->actingAs($admin);
-        Livewire::test(EditOrder::class, ['record' => $order->getRouteKey()])
-            ->fillForm(['status' => 'cancelled'])
+        $stale = Livewire::test(EditOrder::class, ['record' => $order->getRouteKey()]);
+        Livewire::test(ViewOrder::class, ['record' => $order->getRouteKey()])->callAction('refund');
+        $stale->fillForm(['status' => 'processing', 'payment_status' => 'paid'])
             ->call('save')
             ->assertHasNoFormErrors();
 

@@ -3,8 +3,8 @@
 namespace App\Filament\Resources\Orders\Pages;
 
 use App\Filament\Resources\Orders\OrderResource;
+use App\Services\AdminOrderLifecycle;
 use App\Services\InvoiceService;
-use App\Services\StripeService;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Notifications\Notification;
@@ -25,7 +25,8 @@ class ViewOrder extends ViewRecord
                 ->icon('heroicon-o-arrow-uturn-left')
                 ->color('danger')
                 ->visible(function () {
-                    if ($this->record->payment_status !== 'paid' || $this->record->payment_method !== 'stripe' || $this->record->stripe_refund_id) {
+                    if ($this->record->payment_status !== 'paid' || $this->record->payment_method !== 'stripe' || $this->record->stripe_refund_id
+                        || ! in_array($this->record->status, ['new', 'pending', 'processing'], true)) {
                         return false;
                     }
 
@@ -73,8 +74,8 @@ class ViewOrder extends ViewRecord
                             );
                         }
 
-                        app(StripeService::class)
-                            ->refundPayment($this->record);
+                        app(AdminOrderLifecycle::class)
+                            ->refund($this->record);
 
                         Notification::make()
                             ->title('Cererea de rambursare a fost înregistrată.')
@@ -91,7 +92,7 @@ class ViewOrder extends ViewRecord
                             ->success()
                             ->send();
 
-                        $this->refresh();
+                        $this->record->refresh();
 
                     } catch (\Throwable $e) {
 

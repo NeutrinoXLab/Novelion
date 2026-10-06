@@ -116,6 +116,12 @@ class Order extends Model
         'refunded_at' => 'datetime',
     ];
 
+    public function hasDispatchHistory(): bool
+    {
+        return in_array($this->status, ['shipped', 'delivered'], true)
+            || $this->shipped_at !== null || $this->delivered_at !== null;
+    }
+
     /**
      * Evenimente Eloquent.
      */

@@ -66,7 +66,7 @@ class StripeStateApplier
             || ! in_array($refund->status ?? null, ['succeeded', 'pending', 'requires_action', 'failed', 'canceled'], true)) {
             return 'manual_review';
         }
-        if (! $return && $order->returnRequests()->whereNotIn('status', ['rejected'])->exists()) {
+        if (! $return && $refund->status !== 'succeeded' && $order->returnRequests()->whereNotIn('status', ['rejected'])->exists()) {
             return 'manual_review';
         }
         if ($return && ! $this->safeReturn($order, $return)) {
@@ -74,9 +74,7 @@ class StripeStateApplier
         }
         // A stale observation must never undo a committed financial result.
         if ($subject->refund_status === 'completed') {
-            $this->completeRefund($order, $return);
-
-            return 'refund_completed';
+            return $this->completeRefund($order, $return) ? 'refund_completed' : 'manual_review';
         }
         if ($order->payment_status === 'refunded' && ! $return) {
             return 'refund_completed';
@@ -90,8 +88,8 @@ class StripeStateApplier
             'stripe_refund_id' => $refund->id,
             'refund_status' => $completed ? 'completed' : ($failed ? 'failed' : 'processing'),
         ]);
-        if ($completed) {
-            $this->completeRefund($order, $return);
+        if ($completed && ! $this->completeRefund($order, $return)) {
+            return 'manual_review';
         }
 
         return $completed ? 'refund_completed' : ($failed ? 'refund_failed' : 'refund_processing');
@@ -200,16 +198,13 @@ class StripeStateApplier
                     return collect($refunds)->contains(fn ($r) => in_array($r->status, ['pending', 'requires_action'], true))
                         ? 'refund_processing' : 'return_refund_reconciled';
                 }
-                if ($charge->amount_refunded === $charge->amount
-                    && ! $order->returnRequests()->whereNotIn('status', ['rejected'])->exists()) {
+                if ($charge->amount_refunded === $charge->amount) {
                     if ($order->stripe_refund_id && ! collect($refunds)->contains(fn ($r) => $r->id === $order->stripe_refund_id)) {
                         return 'manual_review';
                     }
                     $order->update(['refund_status' => 'completed',
                         'stripe_refund_id' => $order->stripe_refund_id ?: (count($refunds) === 1 ? $refunds[0]->id : null)]);
-                    $this->completeRefund($order, null);
-
-                    return 'refund_completed';
+                    return $this->completeRefund($order, null) ? 'refund_completed' : 'manual_review';
                 }
                 if (count($refunds) === 1 && ($refunds[0]->metadata->order_id ?? null) === (string) $orderId) {
                     return $this->applyRefund($order, null, $refunds[0]);
@@ -312,11 +307,10 @@ class StripeStateApplier
                     $order->update(['payment_status' => 'refunded', 'refund_status' => 'completed']);
                     app(TransactionalEmails::class)->refund($order);
                 } else {
-                    if ($order->returnRequests()->whereNotIn('status', ['rejected'])->exists()) {
+                    $order->update(['refund_status' => 'completed']);
+                    if (! $this->completeRefund($order, null)) {
                         return 'manual_review';
                     }
-                    $order->update(['refund_status' => 'completed']);
-                    $this->completeRefund($order, null);
                 }
 
                 return 'refund_completed';
@@ -402,7 +396,7 @@ class StripeStateApplier
         return true;
     }
 
-    private function completeRefund(Order $order, ?ReturnRequest $return): void
+    private function completeRefund(Order $order, ?ReturnRequest $return): bool
     {
         $subject = $return ?? $order;
         $subject->update(['refunded_at' => $subject->refunded_at ?? now()]);
@@ -410,10 +404,21 @@ class StripeStateApplier
             $return->update(['status' => 'refunded']);
             $return->restoreStock();
         } else {
+            // A financial refund does not prove that dispatched goods came back.
+            // Keep fulfilment history and require explicit classification of any return.
+            if ($order->hasDispatchHistory()
+                || $order->returnRequests()->whereNotIn('status', ['rejected'])->exists()) {
+                $order->update(['payment_status' => 'refunded', 'stripe_reconcile_result' => 'manual_review']);
+                app(TransactionalEmails::class)->refund($subject);
+
+                return false;
+            }
             $order->update(['payment_status' => 'refunded', 'status' => 'cancelled']);
             app(OrderService::class)->restoreStock($order);
         }
         app(TransactionalEmails::class)->refund($subject);
+
+        return true;
     }
 
     public function session(object $session, string $eventType): void

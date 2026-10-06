@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\ProductCommercialRules;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -72,6 +73,14 @@ class Product extends Model
 
     protected static function booted(): void
     {
+        static::saving(function (Product $product): void {
+            // Validate raw values before decimal casts can silently round invalid input.
+            ProductCommercialRules::validate([
+                'stock_quantity' => 0,
+                ...$product->getAttributes(),
+            ]);
+        });
+
         static::creating(function (Product $product): void {
             $product->slug = static::uniqueSlug($product->slug ?: $product->name);
         });

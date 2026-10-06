@@ -31,6 +31,7 @@ class OrderForm
                                 'delivered' => 'Livrată',
                                 'cancelled' => 'Anulată',
                             ])
+                            ->disabled()
                             ->required(),
 
                         Select::make('payment_status')
@@ -41,7 +42,7 @@ class OrderForm
                                 'failed' => 'Eșuată',
                                 'refunded' => 'Rambursată',
                             ])
-                            ->disabled(fn ($record) => $record?->payment_method === 'stripe')
+                            ->disabled()
                             ->required(),
 
                         Select::make('payment_method')

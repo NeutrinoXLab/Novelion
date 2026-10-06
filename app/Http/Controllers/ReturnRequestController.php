@@ -72,7 +72,14 @@ class ReturnRequestController extends Controller
                 );
         }
 
-        $selected = collect($validated['items'])->filter(fn ($qty) => (int) $qty > 0);
+        // Canonical positive IDs prevent aliases such as 01 and 1 claiming one row twice.
+        foreach (array_keys($validated['items']) as $id) {
+            if (filter_var($id, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) === false
+                || (string) (int) $id !== (string) $id) {
+                throw ValidationException::withMessages(['items' => 'Identificatorul poziției din comandă nu este valid.']);
+            }
+        }
+        $selected = collect($validated['items'])->filter(fn ($qty) => (int) $qty > 0)->sortKeys(SORT_NUMERIC);
         if ($selected->isEmpty()) {
             throw ValidationException::withMessages(['items' => 'Selectează cel puțin un produs și o cantitate.']);
         }
@@ -92,9 +99,15 @@ class ReturnRequestController extends Controller
                 'bank_transfer_accepted_at' => $order->payment_method === 'stripe' || ! $request->boolean('accept_bank_transfer') ? null : now(),
             ]);
 
+            $items = $order->items()->whereKey($selected->keys()->all())
+                ->orderBy('id')->lockForUpdate()->get();
+            if ($items->count() !== $selected->count()) {
+                throw ValidationException::withMessages(['items' => 'Una sau mai multe poziții nu aparțin acestei comenzi.']);
+            }
             $amount = 0;
-            foreach ($selected as $orderItemId => $quantity) {
-                $item = $order->items()->whereKey($orderItemId)->lockForUpdate()->firstOrFail();
+            foreach ($items as $item) {
+                $orderItemId = $item->id;
+                $quantity = (int) $selected[$orderItemId];
                 $already = $item->returnItems()->whereHas('returnRequest', fn ($q) => $q->whereNotIn('status', ['rejected']))->sum('quantity');
                 if ($quantity > $item->quantity - $already) {
                     throw ValidationException::withMessages(['items.'.$orderItemId => 'Cantitatea depășește cantitatea disponibilă pentru retur.']);

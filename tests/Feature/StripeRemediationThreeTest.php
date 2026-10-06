@@ -362,12 +362,14 @@ class StripeRemediationThreeTest extends TestCase
             }
         });
         $apply = fn () => app(StripeStateApplier::class)->recovered($this->order->id, StripeObject::constructFrom($this->session), StripeObject::constructFrom($this->pi), StripeObject::constructFrom($this->charge), [], 'same-claim', $context);
+        $caught = null;
         try {
             $apply();
-            $this->fail('Injection did not fire');
         } catch (\RuntimeException $e) {
+            $caught = $e;
             $this->assertTrue($fired);
         }
+        $this->assertNotNull($caught, 'Injection did not fire');
         $this->assertSame('same-claim', $this->order->fresh()->stripe_reconcile_claim);
         $this->assertNull($this->order->fresh()->stripe_session_id);
         $this->assertSame(0, TransactionalEmail::count());

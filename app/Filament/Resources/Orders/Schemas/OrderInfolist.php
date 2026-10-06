@@ -144,6 +144,15 @@ class OrderInfolist
                         default => 'gray',
                     }),
 
+                TextEntry::make('stripe_reconcile_result')
+                    ->label('Verificare rambursare')
+                    ->visible(fn ($record) => $record->payment_status === 'refunded'
+                        && $record->stock_restored_at === null
+                        && $record->hasDispatchHistory())
+                    ->state('Rambursare financiara confirmata. Verifica receptia si stocul in retururile asociate; rambursarea nu confirma receptia marfii.')
+                    ->color('warning')
+                    ->columnSpanFull(),
+
                 TextEntry::make('courier')
                     ->label('Curier')
                     ->placeholder('-'),

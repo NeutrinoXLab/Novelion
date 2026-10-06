@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\ProductCommercialRules;
 use App\Services\TransactionalEmails;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -98,6 +99,8 @@ class ReturnRequest extends Model
                 ])
                 : $return->order->items;
 
+            // Same ascending product lock order as checkout and full-order restoration.
+            $items = $items->sortBy(fn ($item) => $item->product?->id ?? $item->product_id ?? 0);
             foreach ($items as $item) {
                 if ($return->items->isNotEmpty()) {
                     $product = $item->product;
@@ -114,6 +117,7 @@ class ReturnRequest extends Model
                     continue;
                 }
 
+                ProductCommercialRules::validateRestoration($product->stock_quantity, $item->quantity);
                 $product->increment(
                     'stock_quantity',
                     $item->quantity

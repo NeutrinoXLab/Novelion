@@ -150,6 +150,69 @@ class StripeReconciliationTest extends TestCase
         return $return;
     }
 
+    public static function paymentLogisticsStates(): array
+    {
+        return [['shipped', null], ['delivered', null], ['processing', 'shipped_at'],
+            ['processing', 'delivered_at'], ['pending', null], ['new', null]];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('paymentLogisticsStates')]
+    public function test_payment_confirmation_preserves_dispatch_before_refund(string $status, ?string $timestamp): void
+    {
+        config(['stripe_reconciliation.enabled' => false]);
+        $this->order->update(['status' => $status, 'shipped_at' => $timestamp === 'shipped_at' ? now() : null,
+            'delivered_at' => $timestamp === 'delivered_at' ? now() : null]);
+        $timestamps = $this->order->fresh()->only(['shipped_at', 'delivered_at']);
+        $history = ! in_array($status, ['pending', 'new'], true);
+        $this->assertSame($history, $this->order->fresh()->hasDispatchHistory());
+        $this->assertSame('paid', $this->reconcile());
+        $this->due();
+        $this->assertSame('paid', $this->reconcile());
+        $current = $this->order->fresh();
+        $this->assertSame('paid', $current->payment_status);
+        $this->assertSame($history ? $status : 'processing', $current->status);
+        $this->assertEquals($timestamps, $current->only(['shipped_at', 'delivered_at']));
+        $this->assertSame(8, $this->product->fresh()->stock_quantity);
+        $this->assertSame(1, \App\Models\TransactionalEmail::where('event_key', 'order:'.$this->order->id.':paid')->count());
+        if (! $history) {
+            return;
+        }
+        $this->charge['amount_refunded'] = 20000;
+        $this->remote([$this->refund()]);
+        $refundedAt = null;
+        foreach ([1, 2] as $replay) {
+            $this->due();
+            $this->assertSame('manual_review', $this->reconcile());
+            $current = $this->order->fresh();
+            $this->assertSame('refunded', $current->payment_status);
+            $this->assertSame('completed', $current->refund_status);
+            $this->assertSame($status, $current->status);
+            $this->assertTrue($current->hasDispatchHistory());
+            $this->assertEquals($timestamps, $current->only(['shipped_at', 'delivered_at']));
+            $this->assertNull($current->stock_restored_at);
+            $this->assertSame(8, $this->product->fresh()->stock_quantity);
+            foreach (['cancel', 'restoreStock'] as $operation) {
+                $caught = null;
+                try {
+                    app(\App\Services\OrderService::class)->$operation($this->order);
+                } catch (\RuntimeException $exception) {
+                    $caught = $exception;
+                }
+                $this->assertNotNull($caught, $operation.' must reject dispatched goods.');
+            }
+            $this->assertSame(8, $this->product->fresh()->stock_quantity);
+            $this->assertNull($this->order->fresh()->stock_restored_at);
+            $this->assertSame('manual_review', $current->stripe_reconcile_result);
+            $this->assertNotNull($current->refunded_at);
+            if ($refundedAt !== null) {
+                $this->assertEquals($refundedAt, $current->refunded_at);
+            }
+            $refundedAt = $current->refunded_at;
+        }
+        $this->assertSame(1, \App\Models\TransactionalEmail::where('event_key', 'order:'.$this->order->id.':refund:completed')->count());
+        $this->assertSame(0, \App\Models\TransactionalEmail::where('kind', 'cancelled')->count());
+    }
+
     public function test_paid_without_browser_or_webhook_and_duplicate_reconciliation(): void
     {
         $this->assertSame('paid', $this->reconcile());
@@ -631,6 +694,63 @@ class StripeReconciliationTest extends TestCase
         $this->assertNull($this->attempt->fresh()->stripe_session_url);
     }
 
+    public static function dispatchedRefundStates(): array
+    {
+        return [['shipped'], ['delivered']];
+    }
+
+    #[DataProvider('dispatchedRefundStates')]
+    public function test_recovery_records_financial_refund_without_restoring_dispatched_goods(string $status): void
+    {
+        $this->order->update(['payment_status' => 'paid', 'status' => $status,
+            'shipped_at' => now(), 'stripe_payment_intent' => 'pi_f3']);
+        $this->charge['amount_refunded'] = 20000;
+        $this->remote([$this->refund()]);
+        $this->assertSame('manual_review', $this->reconcile());
+        $marker = $this->order->fresh()->refunded_at;
+        $this->due();
+        $this->assertSame('manual_review', $this->reconcile());
+        $this->assertSame('refunded', $this->order->fresh()->payment_status);
+        $this->assertSame('completed', $this->order->fresh()->refund_status);
+        $this->assertSame($status, $this->order->fresh()->status);
+        $this->assertEquals($marker, $this->order->fresh()->refunded_at);
+        $this->assertNotNull($marker);
+        $this->assertNull($this->order->fresh()->stock_restored_at);
+        $this->assertSame(8, $this->product->fresh()->stock_quantity);
+        $this->assertSame(1, TransactionalEmail::where('event_key', 'order:'.$this->order->id.':refund:completed')->count());
+        $this->assertSame(0, TransactionalEmail::where('kind', 'cancelled')->count());
+    }
+
+    public static function legacyDispatchTimestamps(): array
+    {
+        return [['shipped_at'], ['delivered_at']];
+    }
+
+    #[DataProvider('legacyDispatchTimestamps')]
+    public function test_recovery_legacy_dispatch_cannot_be_followed_by_stock_releasing_cancel(string $timestamp): void
+    {
+        $this->order->update(['payment_status' => 'paid', 'status' => 'processing',
+            $timestamp => now(), 'stripe_payment_intent' => 'pi_f3']);
+        $this->charge['amount_refunded'] = 20000;
+        $this->remote([$this->refund()]);
+        foreach ([1, 2] as $replay) {
+            $this->due();
+            $this->assertSame('manual_review', $this->reconcile());
+            $caught = null;
+            try {
+                app(\App\Services\OrderService::class)->cancel($this->order);
+            } catch (\RuntimeException $exception) {
+                $caught = $exception;
+            }
+            $this->assertNotNull($caught, 'Dispatch history must prevent reservation release.');
+        }
+        $this->assertSame('processing', $this->order->fresh()->status);
+        $this->assertSame('refunded', $this->order->fresh()->payment_status);
+        $this->assertSame(8, $this->product->fresh()->stock_quantity);
+        $this->assertNull($this->order->fresh()->stock_restored_at);
+        $this->assertSame(1, TransactionalEmail::where('event_key', 'order:'.$this->order->id.':refund:completed')->count());
+    }
+
     public function test_full_return_refund_preserves_delivered_order_and_does_not_double_restore(): void
     {
         $return = $this->returnRequest(200);
@@ -970,12 +1090,14 @@ class StripeReconciliationTest extends TestCase
 
             return $refund;
         };
+        $caught = null;
         try {
             app(StripeService::class)->refundReturn($return);
-            $this->fail('Unsafe automatic Return application was accepted.');
-        } catch (\RuntimeException) {
+        } catch (\RuntimeException $exception) {
+            $caught = $exception;
             $this->assertSame('manual_review', $this->order->fresh()->stripe_reconcile_result);
         }
+        $this->assertNotNull($caught, 'Unsafe automatic Return application was accepted.');
         $this->webhook('refund.updated', $refund)->assertOk();
         $this->assertSame(8, $this->product->fresh()->stock_quantity);
         $this->assertSame('received', $return->fresh()->status);
@@ -1373,12 +1495,14 @@ class StripeReconciliationTest extends TestCase
         $refund['livemode'] = true;
         $this->assertSame('manual_review', app(StripeStateApplier::class)->refund(StripeObject::constructFrom($refund)));
         $this->api->responses['/v1/refunds'] = $refund;
+        $caught = null;
         try {
             app(StripeService::class)->refundReturn($return);
-            $this->fail('Mismatched admin response applied business effects.');
         } catch (\RuntimeException $e) {
+            $caught = $e;
             $this->assertStringContainsString('manual review', $e->getMessage());
         }
+        $this->assertNotNull($caught, 'Mismatched admin response applied business effects.');
         $this->assertSame('received', $return->fresh()->status);
         $this->assertSame(8, $this->product->fresh()->stock_quantity);
         $this->assertSame(0, TransactionalEmail::count());

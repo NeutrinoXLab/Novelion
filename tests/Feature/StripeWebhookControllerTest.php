@@ -44,6 +44,72 @@ class StripeWebhookControllerTest extends TestCase
         parent::tearDown();
     }
 
+    public static function paymentLogisticsStates(): array
+    {
+        return [['shipped', null], ['delivered', null], ['processing', 'shipped_at'],
+            ['processing', 'delivered_at'], ['pending', null], ['new', null]];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('paymentLogisticsStates')]
+    public function test_payment_confirmation_preserves_dispatch_before_refund(string $status, ?string $timestamp): void
+    {
+        config(['stripe_reconciliation.enabled' => false]);
+        $order = $this->createStripeOrder('pending', $status);
+        $product = $order->items()->firstOrFail()->product;
+        $order->update(['status' => $status, 'shipped_at' => $timestamp === 'shipped_at' ? now() : null,
+            'delivered_at' => $timestamp === 'delivered_at' ? now() : null]);
+        $timestamps = $order->fresh()->only(['shipped_at', 'delivered_at']);
+        $history = ! in_array($status, ['pending', 'new'], true);
+        $this->assertSame($history, $order->fresh()->hasDispatchHistory());
+        $payload = $this->paidSession($order);
+        foreach (['checkout.session.completed', 'checkout.session.async_payment_succeeded'] as $event) {
+            $this->sendWebhook($event, $payload)->assertOk();
+        }
+        $current = $order->fresh();
+        $this->assertSame('paid', $current->payment_status);
+        $this->assertSame($history ? $status : 'processing', $current->status);
+        $this->assertEquals($timestamps, $current->only(['shipped_at', 'delivered_at']));
+        $this->assertSame(6, $product->fresh()->stock_quantity);
+        $this->assertSame(1, \App\Models\TransactionalEmail::where('event_key', 'order:'.$order->id.':paid')->count());
+        if (! $history) {
+            return;
+        }
+        $refund = ['id' => 're_history_payment', 'payment_intent' => $payload['payment_intent'],
+            'amount' => 40000, 'currency' => 'ron', 'status' => 'succeeded',
+            'metadata' => ['order_id' => (string) $order->id]];
+        $refundedAt = null;
+        foreach ([1, 2] as $replay) {
+            $this->sendWebhook('refund.updated', $refund)->assertOk();
+            $current = $order->fresh();
+            $this->assertSame('refunded', $current->payment_status);
+            $this->assertSame('completed', $current->refund_status);
+            $this->assertSame($status, $current->status);
+            $this->assertTrue($current->hasDispatchHistory());
+            $this->assertEquals($timestamps, $current->only(['shipped_at', 'delivered_at']));
+            $this->assertNull($current->stock_restored_at);
+            $this->assertSame(6, $product->fresh()->stock_quantity);
+            foreach (['cancel', 'restoreStock'] as $operation) {
+                $caught = null;
+                try {
+                    app(\App\Services\OrderService::class)->$operation($order);
+                } catch (\RuntimeException $exception) {
+                    $caught = $exception;
+                }
+                $this->assertNotNull($caught, $operation.' must reject dispatched goods.');
+            }
+            $this->assertSame(6, $product->fresh()->stock_quantity);
+            $this->assertNull($order->fresh()->stock_restored_at);
+            $this->assertSame('manual_review', $current->stripe_reconcile_result);
+            $this->assertNotNull($current->refunded_at);
+            if ($refundedAt !== null) {
+                $this->assertEquals($refundedAt, $current->refunded_at);
+            }
+            $refundedAt = $current->refunded_at;
+        }
+        $this->assertSame(1, \App\Models\TransactionalEmail::where('event_key', 'order:'.$order->id.':refund:completed')->count());
+        $this->assertSame(0, \App\Models\TransactionalEmail::where('kind', 'cancelled')->count());
+    }
+
     public function test_a_late_payment_after_expiry_does_not_reactivate_a_cancelled_order_or_reserve_stock_again(): void
     {
         $order = $this->createStripeOrder();
@@ -460,6 +526,107 @@ class StripeWebhookControllerTest extends TestCase
         $this->expectExceptionMessage('retur activ');
 
         app(StripeService::class)->refundPayment($order);
+    }
+
+    public static function dispatchedRefunds(): array
+    {
+        return [['shipped', 'charge.refunded'], ['delivered', 'charge.refunded'],
+            ['shipped', 'refund.updated'], ['delivered', 'refund.updated'],
+            ['processing', 'charge.refunded', 'shipped_at'], ['processing', 'charge.refunded', 'delivered_at'],
+            ['processing', 'refund.updated', 'shipped_at'], ['processing', 'refund.updated', 'delivered_at']];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('dispatchedRefunds')]
+    public function test_dispatched_financial_refund_does_not_restore_goods(string $status, string $event, ?string $history = null): void
+    {
+        config(['stripe_reconciliation.enabled' => false]);
+        $order = $this->createStripeOrder('paid', $status);
+        if ($history !== null) {
+            $order->update([$history => now()]);
+        }
+        $product = $order->items()->firstOrFail()->product;
+        $refund = ['id' => 're_dispatched', 'object' => 'refund', 'payment_intent' => $order->stripe_payment_intent,
+            'amount' => 40000, 'currency' => 'ron', 'status' => 'succeeded',
+            'metadata' => ['order_id' => (string) $order->id]];
+        $this->fakeRefundList([$refund]);
+        $payload = $event === 'refund.updated' ? $refund : ['id' => 'ch_dispatched',
+            'payment_intent' => $order->stripe_payment_intent, 'amount' => 40000,
+            'amount_refunded' => 40000, 'currency' => 'ron'];
+        $this->sendWebhook($event, $payload)->assertOk();
+        $marker = $order->fresh()->refunded_at;
+        $this->sendWebhook($event, $payload)->assertOk();
+        $this->assertSame('refunded', $order->fresh()->payment_status);
+        $this->assertSame('completed', $order->fresh()->refund_status);
+        $this->assertSame('manual_review', $order->fresh()->stripe_reconcile_result);
+        $this->assertSame($status, $order->fresh()->status);
+        $this->assertSame(6, $product->fresh()->stock_quantity);
+        $this->assertNull($order->fresh()->stock_restored_at);
+        $this->assertNotNull($marker);
+        $this->assertEquals($marker, $order->fresh()->refunded_at);
+        $this->assertSame(1, \App\Models\TransactionalEmail::where('event_key', 'order:'.$order->id.':refund:completed')->count());
+        $this->assertSame(0, \App\Models\TransactionalEmail::where('kind', 'cancelled')->count());
+        $refund['status'] = 'failed';
+        $this->sendWebhook('refund.failed', $refund)->assertOk();
+        $this->assertSame('refunded', $order->fresh()->payment_status);
+        $this->assertSame('completed', $order->fresh()->refund_status);
+        $this->assertSame(6, $product->fresh()->stock_quantity);
+    }
+
+    public function test_failed_dispatched_refund_never_restores_stock(): void
+    {
+        $order = $this->createStripeOrder('paid', 'delivered');
+        $this->sendWebhook('refund.failed', ['id' => 're_failed', 'payment_intent' => $order->stripe_payment_intent,
+            'amount' => 40000, 'currency' => 'ron', 'status' => 'failed',
+            'metadata' => ['order_id' => (string) $order->id]])->assertOk();
+        $this->assertSame('paid', $order->fresh()->payment_status);
+        $this->assertSame('failed', $order->fresh()->refund_status);
+        $this->assertSame('delivered', $order->fresh()->status);
+        $this->assertNull($order->fresh()->stock_restored_at);
+        $this->assertSame(6, $order->items()->first()->product->stock_quantity);
+    }
+
+    public function test_financial_refund_then_explicit_received_return_restores_once(): void
+    {
+        config(['stripe_reconciliation.enabled' => false]);
+        $order = $this->createStripeOrder('paid', 'delivered');
+        $product = $order->items()->firstOrFail()->product;
+        $payload = ['id' => 'ch_physical', 'payment_intent' => $order->stripe_payment_intent,
+            'amount' => 40000, 'amount_refunded' => 40000, 'currency' => 'ron'];
+        $this->fakeRefundList([['id' => 're_physical', 'metadata' => []]]);
+        $this->sendWebhook('charge.refunded', $payload)->assertOk();
+        $this->assertSame('refunded', $order->fresh()->payment_status);
+        $this->assertSame(6, $product->fresh()->stock_quantity);
+        $user = User::factory()->create();
+        $order->update(['user_id' => $user->id]);
+        $return = ReturnRequest::create(['order_id' => $order->id, 'user_id' => $user->id,
+            'status' => 'received', 'reason' => 'Physical receipt confirmed', 'received_at' => now(),
+            'refund_method' => 'stripe', 'refund_currency' => 'RON', 'refund_amount' => 400, 'requested_at' => now()]);
+        $return->items()->create(['order_item_id' => $order->items()->first()->id,
+            'quantity' => 4, 'unit_price' => 100, 'line_refund_amount' => 400]);
+        // Existing explicit Stripe metadata correlation, never infer a return from money alone.
+        $this->fakeRefundList([['id' => 're_physical', 'metadata' => [
+            'order_id' => (string) $order->id, 'return_request_id' => (string) $return->id]]]);
+        $this->sendWebhook('charge.refunded', $payload)->assertOk();
+        $marker = $return->fresh()->stock_restored_at;
+        $this->sendWebhook('charge.refunded', $payload)->assertOk();
+        $this->assertSame(10, $product->fresh()->stock_quantity);
+        $this->assertSame('refunded', $return->fresh()->status);
+        $this->assertSame('delivered', $order->fresh()->status);
+        $this->assertNotNull($marker);
+        $this->assertEquals($marker, $return->fresh()->stock_restored_at);
+        $this->assertNull($order->fresh()->stock_restored_at);
+        $this->assertSame(1, \App\Models\TransactionalEmail::where('event_key', 'return:'.$return->id.':refund:completed')->count());
+        $this->assertSame(1, \App\Models\TransactionalEmail::where('event_key', 'order:'.$order->id.':refund:completed')->count());
+    }
+
+    public function test_admin_physical_return_notice_survives_operational_result_changes(): void
+    {
+        $order = $this->createStripeOrder('paid', 'delivered');
+        $order->update(['payment_status' => 'refunded', 'refund_status' => 'completed',
+            'stripe_reconcile_result' => 'refund_completed']);
+        $this->actingAs(User::factory()->create(['is_admin' => true]));
+        \Livewire\Livewire::test(\App\Filament\Resources\Orders\Pages\ViewOrder::class,
+            ['record' => $order->id])->assertSee('Rambursare financiara confirmata.');
     }
 
     private function fakeRefundList(array $refunds): void

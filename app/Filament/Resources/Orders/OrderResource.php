@@ -25,6 +25,12 @@ class OrderResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'order_number';
 
+    public static function canCreate(): bool
+    {
+        // Generic creation bypasses stock reservation and order totals.
+        return false;
+    }
+
     public static function form(Schema $schema): Schema
     {
         return OrderForm::configure($schema);

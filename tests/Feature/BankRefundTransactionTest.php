@@ -10,6 +10,7 @@ use App\Models\Product;
 use App\Models\ReturnRequest;
 use App\Models\TransactionalEmail;
 use App\Models\User;
+use App\Services\ProductCommercialRules;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -129,16 +130,38 @@ class BankRefundTransactionTest extends TestCase
         [$return, $product] = $this->fixture();
         $stale = $this->operation($return->fresh());
         ($this->operation($return))(['refund_status' => 'completed']);
+        $caught = null;
         try {
             $stale(['refund_status' => 'processing']);
-            $this->fail('A stale action must not revert a completed refund.');
         } catch (\RuntimeException $exception) {
+            $caught = $exception;
             $this->assertStringContainsString('nu mai permite', $exception->getMessage());
         }
+        $this->assertNotNull($caught, 'A stale action must not revert a completed refund.');
         $this->assertSame('completed', $return->fresh()->refund_status);
         $this->assertSame('refunded', $return->fresh()->status);
         $this->assertSame(8, $product->fresh()->stock_quantity);
         $this->assertSame(1, TransactionalEmail::count());
+    }
+
+    public function test_stock_overflow_rolls_back_bank_refund_and_can_be_retried(): void
+    {
+        [$return, $product] = $this->fixture();
+        $product->update(['stock_quantity' => ProductCommercialRules::MAX_STOCK]);
+        $caught = null;
+        try {
+            ($this->operation($return))(['refund_status' => 'completed']);
+        } catch (\RuntimeException $exception) {
+            $caught = $exception;
+            $this->assertStringContainsString('stoc invalid', $exception->getMessage());
+        }
+        $this->assertNotNull($caught, 'Stock overflow must not complete a refund.');
+        $this->assertSame('processing', $return->fresh()->refund_status);
+        $this->assertNull($return->fresh()->stock_restored_at);
+        $this->assertSame(ProductCommercialRules::MAX_STOCK, $product->fresh()->stock_quantity);
+        $product->refresh()->update(['stock_quantity' => 6]);
+        ($this->operation($return))(['refund_status' => 'completed']);
+        $this->assertSame(8, $product->fresh()->stock_quantity);
     }
 
     private function assertRolledBack(ReturnRequest $return, Product $product): void

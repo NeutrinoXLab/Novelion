@@ -3,12 +3,14 @@
 namespace App\Filament\Resources\Orders\Pages;
 
 use App\Filament\Resources\Orders\OrderResource;
-use App\Services\OrderService;
-use App\Services\StripeService;
+use App\Services\AdminOrderLifecycle;
+use Filament\Actions\Action;
 use Filament\Actions\ViewAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
-use Filament\Support\Exceptions\Halt;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Arr;
+use Illuminate\Validation\ValidationException;
 
 class EditOrder extends EditRecord
 {
@@ -16,55 +18,46 @@ class EditOrder extends EditRecord
 
     protected function getHeaderActions(): array
     {
-        return [
-            ViewAction::make(),
-        ];
+        $actions = [ViewAction::make()];
+        foreach ([
+            'processing' => 'Începe procesarea',
+            'shipped' => 'Confirmă expedierea',
+            'delivered' => 'Confirmă livrarea',
+            'cash_paid' => 'Confirmă încasarea ramburs',
+            'cancelled' => 'Anulează comanda neplătită',
+        ] as $target => $label) {
+            $actions[] = Action::make($target)->label($label)->requiresConfirmation()
+                ->modalDescription($target === 'cash_paid'
+                    ? 'Confirmă numai după verificarea încasării efective.'
+                    : 'Operația se verifică pe starea actuală. Plățile încasate se rambursează prin fluxul dedicat din pagina comenzii/returului.')
+                ->action(function () use ($target): void {
+                    $this->authorizeAccess();
+                    try {
+                        $this->record = app(AdminOrderLifecycle::class)->transition($this->record, $target);
+                    } catch (ValidationException $exception) {
+                        Notification::make()->title(collect($exception->errors())->flatten()->first())->danger()->send();
+
+                        return;
+                    }
+                    $this->refreshFormData(['status', 'payment_status']);
+                    Notification::make()->title('Operația a fost înregistrată.')->success()->send();
+                });
+        }
+
+        return $actions;
     }
 
-    protected function beforeSave(): void
+    protected function handleRecordUpdate(Model $record, array $data): Model
     {
-        if (
-            $this->record->status !== 'cancelled' &&
-            ($this->data['status'] ?? null) === 'cancelled'
-        ) {
-            /*
-             * Dacă o comandă Stripe este deja plătită,
-             * efectuăm mai întâi refund-ul Stripe.
-             */
-            if (
-                $this->record->payment_method === 'stripe' &&
-                $this->record->payment_status === 'paid'
-            ) {
-                app(StripeService::class)
-                    ->refundPayment($this->record);
-                if ($this->record->fresh()->refund_status !== 'completed') {
-                    Notification::make()->title('Rambursarea a fost inițiată. Anularea se finalizează după confirmarea Stripe.')->warning()->send();
-                    throw new Halt;
-                }
-            }
+        // Never persist lifecycle/financial fields, even from a forged or stale form.
+        $record->update(Arr::only($data, [
+            'customer_type', 'first_name', 'last_name', 'email', 'phone',
+            'county', 'city', 'address', 'postal_code', 'company_name', 'company_vat',
+            'company_registration', 'company_address', 'company_city', 'company_county',
+            'shipping_first_name', 'shipping_last_name', 'shipping_phone',
+            'shipping_county', 'shipping_city', 'shipping_address', 'shipping_postal_code', 'notes',
+        ]));
 
-            app(OrderService::class)->cancel($this->record);
-        }
-
-        if (
-            $this->record->status !== 'delivered' &&
-            ($this->data['status'] ?? null) === 'delivered' &&
-            $this->record->delivered_at === null
-        ) {
-            $this->record->delivered_at = now();
-        }
-    }
-
-    protected function mutateFormDataBeforeSave(array $data): array
-    {
-        // Aceste câmpuri reflectă plata reală și nu trebuie rescrise de
-        // un formular deschis înainte de refund sau webhook.
-        unset($data['payment_method']);
-
-        if ($this->record->payment_method === 'stripe') {
-            unset($data['payment_status']);
-        }
-
-        return $data;
+        return $record->refresh();
     }
 }

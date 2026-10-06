@@ -39,6 +39,9 @@ class OrderService
                 }
 
                 $quantities[$productId] = ($quantities[$productId] ?? 0) + $quantity;
+                if ($quantities[$productId] > ProductCommercialRules::MAX_STOCK) {
+                    throw new \RuntimeException('Cantitatea depășește limita de stoc.');
+                }
             }
 
             ksort($quantities);
@@ -47,6 +50,8 @@ class OrderService
             foreach ($quantities as $productId => $quantity) {
                 $product = Product::query()->whereKey($productId)
                     ->lockForUpdate()->firstOrFail();
+
+                ProductCommercialRules::validate($product->getAttributes());
 
                 if (! $product->is_active || $quantity > $product->stock_quantity) {
                     throw new \Exception(
@@ -66,11 +71,29 @@ class OrderService
             |--------------------------------------------------------------------------
             */
 
-            $subtotal = (float) collect($lockedItems)
-                ->sum(fn (array $item): float => (float) $item['price'] * $item['quantity']);
+            if ($lockedItems === []) {
+                throw new \RuntimeException('Comanda trebuie să conțină produse.');
+            }
+            $subtotalCents = 0;
+            foreach ($lockedItems as $item) {
+                $unitCents = (int) round((float) $item['price'] * 100);
+                // Check before multiplying: even valid individual inputs may overflow
+                // PHP integers or the DECIMAL(10,2) order/item columns in combination.
+                if ($item['quantity'] > intdiv(9999999999 - $subtotalCents, $unitCents)) {
+                    throw new \RuntimeException('Totalul comenzii depășește limita acceptată.');
+                }
+                $subtotalCents += $unitCents * $item['quantity'];
+            }
+            $subtotal = $subtotalCents / 100;
             $shippingCost = $cart->shippingCost();
             $shippingName = $cart->shippingName();
-            $total = $subtotal + $shippingCost;
+            if (! is_finite($shippingCost) || $shippingCost < 0 || $shippingCost > ProductCommercialRules::MAX_MONEY) {
+                throw new \RuntimeException('Tariful de transport este invalid.');
+            }
+            $total = ($subtotalCents + (int) round($shippingCost * 100)) / 100;
+            if ($total <= 0 || $total > ProductCommercialRules::MAX_MONEY) {
+                throw new \RuntimeException('Totalul comenzii depășește limita acceptată.');
+            }
 
             /*
             |--------------------------------------------------------------------------
@@ -244,13 +267,14 @@ class OrderService
              * Un refund confirmat nu poate fi transformat ulterior într-o
              * plată reușită de un webhook întârziat.
              */
-            if ($order->payment_status === 'refunded' || $order->status === 'cancelled') {
+            if ($order->payment_status === 'refunded' || $order->status === 'cancelled' || $order->stock_restored_at !== null) {
                 return false;
             }
 
             $order->update([
                 'payment_status' => 'paid',
-                'status' => 'processing',
+                // Confirm money without erasing legacy dispatch evidence or inventing dates.
+                'status' => $order->hasDispatchHistory() ? $order->status : 'processing',
                 'stock_restored_at' => null,
             ]);
 
@@ -284,18 +308,24 @@ class OrderService
                 return;
             }
 
-            $order->load('items.product');
+            if ($order->hasDispatchHistory()) {
+                throw new \RuntimeException('Marfa expediată necesită un retur fizic validat pentru restaurarea stocului.');
+            }
+
+            $order->load(['items' => fn ($query) => $query->orderBy('product_id')]);
 
             /*
              * Refacem stocul.
              */
             foreach ($order->items as $item) {
 
-                if (! $item->product) {
+                $product = Product::query()->whereKey($item->product_id)->lockForUpdate()->first();
+                if (! $product) {
                     continue;
                 }
+                ProductCommercialRules::validateRestoration($product->stock_quantity, $item->quantity);
 
-                $item->product->increment(
+                $product->increment(
                     'stock_quantity',
                     $item->quantity
                 );
@@ -326,7 +356,7 @@ class OrderService
              * Webhook-urile pot ajunge în orice ordine. O expirare sau o
              * eșuare venită târziu nu trebuie să anuleze o plată confirmată.
              */
-            if (in_array($order->payment_status, ['paid', 'refunded'], true)) {
+            if ($order->hasDispatchHistory() || in_array($order->payment_status, ['paid', 'refunded'], true)) {
                 return;
             }
 
@@ -349,13 +379,20 @@ class OrderService
     {
         DB::transaction(function () use ($order) {
 
-            /*
-             * Luăm starea actuală din baza de date.
-             *
-             * Este important deoarece această metodă este apelată
-             * înainte ca Filament să salveze noul status.
-             */
-            $order->refresh();
+            // Acquire the order before checking payment. Never acquire an attempt or
+            // return lock after this point: order -> products is a suffix of F1-F3 ordering.
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+
+            if ($order->hasDispatchHistory()
+                || ! in_array($order->status, ['new', 'pending', 'processing', 'cancelled'], true)) {
+                throw new \RuntimeException('O comandă expediată sau livrată necesită fluxul de retur.');
+            }
+            if ($order->refund_status && $order->refund_status !== 'completed') {
+                throw new \RuntimeException('Rambursarea trebuie clarificată înainte de anulare.');
+            }
+            if ($order->returnRequests()->whereNotIn('status', ['rejected'])->exists()) {
+                throw new \RuntimeException('Comanda are un retur activ sau rambursat.');
+            }
 
             $currentStatus = $order->status;
 

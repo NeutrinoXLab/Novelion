@@ -78,18 +78,21 @@ class ProductForm
                             ->hintAction(self::info('purchase_price', 'Costul de cumpărare al produsului, folosit intern pentru evidență și calculul marjei.'))
                             ->required()
                             ->numeric()
+                            ->minValue(0)->maxValue(99999999.99)->rules(['decimal:0,2'])
                             ->prefix('Lei'),
 
                         TextInput::make('selling_price')
                             ->label('Preț vânzare')
                             ->required()
                             ->numeric()
+                            ->minValue(0.01)->maxValue(99999999.99)->rules(['decimal:0,2'])
                             ->prefix('Lei'),
 
                         TextInput::make('sale_price')
                             ->label('Preț promoțional')
                             ->hintAction(self::info('sale_price', 'Prețul de vânzare redus, folosit atunci când produsul este oferit la promoție.'))
                             ->numeric()
+                            ->minValue(0.01)->maxValue(99999999.99)->rules(['decimal:0,2'])
                             ->prefix('Lei'),
 
                         TextInput::make('vat_rate')->label('TVA (%)')->numeric()->default(0)
@@ -106,6 +109,7 @@ class ProductForm
                             ->label('Stoc')
                             ->required()
                             ->numeric()
+                            ->integer()->minValue(0)->maxValue(2147483647)
                             ->default(0),
 
                         TextInput::make('low_stock_threshold')

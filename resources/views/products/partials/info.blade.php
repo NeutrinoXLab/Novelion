@@ -4,7 +4,7 @@
         : false;
 @endphp
 
-<div>
+<div class="min-w-0">
 
     <div class="flex items-start justify-between">
 
@@ -92,11 +92,15 @@
 
     </div>
 
-    <h1 class="mt-6 text-5xl font-bold text-slate-900">
+    <h1 class="mt-6 text-3xl sm:text-4xl xl:text-5xl break-words font-bold text-slate-900">
 
         {{ $product->name }}
 
     </h1>
+
+    @if(filled(trim((string) $product->short_description)))
+        <p class="product-short-description mt-5 max-w-prose text-base sm:text-lg leading-relaxed text-slate-600 whitespace-pre-line break-words">{{ trim($product->short_description) }}</p>
+    @endif
 
     <div class="mt-5 flex items-center gap-3">
 
@@ -311,16 +315,5 @@
 
     </div>
 
-    @if($product->manufacturer_name || $product->model_identifier || $product->warnings || $product->safety_instructions)
-    <div class="mt-12"><h2 class="text-2xl font-bold mb-4">Identificare și siguranță</h2>
-        @if($product->manufacturer_name)<p><strong>Producător:</strong> {{ $product->manufacturer_name }}</p>@endif
-        @if($product->manufacturer_contact)<p><strong>Contact producător:</strong> {{ $product->manufacturer_contact }}</p>@endif
-        @if($product->model_identifier)<p><strong>Model/identificare:</strong> {{ $product->model_identifier }}</p>@endif
-        @if($product->eu_responsible_person_name)<p><strong>Persoană responsabilă în UE:</strong> {{ $product->eu_responsible_person_name }} — {{ $product->eu_responsible_person_contact }}</p>@endif
-        @if($product->warnings)<p><strong>Avertismente:</strong> {{ $product->warnings }}</p>@endif
-        @if($product->safety_instructions)<p><strong>Instrucțiuni:</strong> {{ $product->safety_instructions }}</p>@endif
-        @if($product->commercial_warranty)<p><strong>Garanție comercială a producătorului:</strong> {{ $product->commercial_warranty }}</p>@endif
-    </div>
-    @endif
 
 </div>

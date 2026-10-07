@@ -1,3 +1,8 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* RichEditor paragraphs and literal line breaks remain readable after sanitization. */
+.product-description p { white-space: pre-line; margin-bottom: 1rem; }
+.product-description p:empty { min-height: 1em; }
+.product-description > :last-child { margin-bottom: 0; }

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Products\RelationManagers;
 
 use App\Models\ProductImage;
+use App\Services\ProductImageUpload;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -18,6 +19,7 @@ use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class ImagesRelationManager extends RelationManager
 {
@@ -35,7 +37,9 @@ class ImagesRelationManager extends RelationManager
                     ->disk('public')
                     ->directory('products')
                     ->image()
-                    ->imageEditor()
+                    ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
+                    ->saveUploadedFileUsing(fn (TemporaryUploadedFile $file): string => app(ProductImageUpload::class)->store($file))
+                    ->helperText('JPEG, PNG sau WebP; maximum 5 MB / 12 MP. Originalul se păstrează privat; copia publică primește emblema Novelion.')
                     ->maxSize(5120)
                     ->required(),
 

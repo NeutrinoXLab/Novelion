@@ -1,4 +1,4 @@
-<div
+<div class="min-w-0"
     x-data="{
         selectedImage: '{{ $product->primary_image_path
             ? asset('storage/' . $product->primary_image_path)
@@ -10,7 +10,7 @@
 
         <template x-if="selectedImage">
 
-            <img
+            <img draggable="false" @dragstart.prevent
                 :src="selectedImage"
                 alt="{{ $product->name }}"
                 class="w-full h-[420px] sm:h-[520px] lg:h-[600px] object-contain transition duration-300">
@@ -19,7 +19,7 @@
 
         <template x-if="!selectedImage">
 
-            <div class="h-[600px] flex items-center justify-center text-8xl">
+            <div class="h-[420px] sm:h-[520px] lg:h-[600px] flex items-center justify-center text-8xl">
 
                 📦
 
@@ -44,7 +44,7 @@
                         : 'border-slate-200'"
                     class="rounded-2xl overflow-hidden border bg-white transition hover:border-cyan-500">
 
-                    <img
+                    <img draggable="false" @dragstart.prevent
                         src="{{ asset('storage/'.$image->image_path) }}"
                         alt="{{ $product->name }}"
                         class="w-full h-20 sm:h-24 object-contain p-1">

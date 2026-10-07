@@ -18,6 +18,8 @@
 
         @include('products.partials.description')
 
+        @include('products.partials.safety')
+
         {{-- Recenzii --}}
         <x-product-reviews :product="$product" />
 

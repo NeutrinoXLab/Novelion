@@ -15,7 +15,7 @@
 @if($visibleSafetyFields)
 <section class="mt-14 border-t border-slate-200 pt-10" aria-labelledby="product-safety-heading">
     <h2 id="product-safety-heading" class="text-2xl sm:text-3xl font-bold text-slate-900 mb-6">Identificare și siguranță</h2>
-    <div class="space-y-6 max-w-prose text-slate-700 leading-8 break-words">
+    <div class="space-y-6 text-slate-700 leading-8 break-words">
         @foreach($visibleSafetyFields as $field => $label)
             <div>
                 <h3 class="font-semibold text-slate-900 mb-2">{{ $label }}</h3>

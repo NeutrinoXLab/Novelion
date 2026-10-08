@@ -5,9 +5,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>
-        @yield('title', 'Novelion')
-    </title>
+    @php($seo = app(\App\Services\StorefrontSeo::class)->metadata(request()))
+    <title>@if($seo['title']){{ $seo['title'] }}@else @yield('title', 'Novelion') @endif</title>
+    @if($seo['canonical'])
+        <link rel="canonical" href="{{ $seo['canonical'] }}">
+    @endif
+    @if($seo['description'])
+        <meta name="description" content="{{ $seo['description'] }}">
+    @endif
 
     @include('partials.favicon')
 

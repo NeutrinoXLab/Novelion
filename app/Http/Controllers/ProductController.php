@@ -113,6 +113,8 @@ class ProductController extends Controller
      */
     public function show(Product $product)
     {
+        abort_unless($product->is_active, 404);
+
         $product->load([
             'images',
             'brand',

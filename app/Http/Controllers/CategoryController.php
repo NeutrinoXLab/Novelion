@@ -24,6 +24,8 @@ class CategoryController extends Controller
      */
     public function show(Category $category)
     {
+        abort_unless($category->is_active, 404);
+
         $products = $category
             ->products()
             ->where('is_active', true)

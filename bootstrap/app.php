@@ -14,6 +14,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
 
+        $middleware->append(\App\Http\Middleware\SearchIndexing::class);
         $middleware->web(append: [TrackVisits::class]);
 
         $middleware->trustProxies(headers: Request::HEADER_X_FORWARDED_PROTO);

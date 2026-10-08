@@ -25,6 +25,10 @@ use Illuminate\Support\Facades\Storage;
 |--------------------------------------------------------------------------
 */
 
+Route::get('/sitemap.xml', [\App\Http\Controllers\SitemapController::class, 'index'])->name('sitemap');
+Route::get('/sitemap-{kind}-{page}.xml', [\App\Http\Controllers\SitemapController::class, 'page'])
+    ->where('kind', 'products|categories|pages')->where('page', '[1-9][0-9]{0,5}')->name('sitemap.page');
+
 Route::get('/', [HomeController::class, 'index'])
     ->name('home');
 

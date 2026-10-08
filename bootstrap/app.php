@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\TrackVisits;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -12,6 +13,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+
+        $middleware->web(append: [TrackVisits::class]);
 
         $middleware->trustProxies(headers: Request::HEADER_X_FORWARDED_PROTO);
         $middleware->trustHosts(at: ['^novelions\.ro$', '^www\.novelions\.ro$'], subdomains: false);

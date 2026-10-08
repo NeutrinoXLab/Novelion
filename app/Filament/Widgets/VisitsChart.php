@@ -2,9 +2,8 @@
 
 namespace App\Filament\Widgets;
 
-use App\Models\Visit;
+use App\Services\VisitorAnalytics;
 use Filament\Widgets\ChartWidget;
-use Illuminate\Support\Carbon;
 
 class VisitsChart extends ChartWidget
 {
@@ -12,14 +11,9 @@ class VisitsChart extends ChartWidget
 
     protected function getData(): array
     {
-        $startDate = now()->subDays(29)->startOfDay();
-
-        $visits = Visit::query()
-            ->where('created_at', '>=', $startDate)
-            ->selectRaw('DATE(created_at) as date, COUNT(*) as total')
-            ->groupBy('date')
-            ->orderBy('date')
-            ->pluck('total', 'date');
+        $analytics = app(VisitorAnalytics::class);
+        $startDate = $analytics->day()->subDays(29);
+        $visits = $analytics->summary()['days'];
 
         $labels = [];
         $data = [];
@@ -38,7 +32,7 @@ class VisitsChart extends ChartWidget
         return [
             'datasets' => [
                 [
-                    'label' => 'Vizite',
+                    'label' => 'Vizite unice IP/zi (istoric vechi exclus)',
                     'data' => $data,
                 ],
             ],

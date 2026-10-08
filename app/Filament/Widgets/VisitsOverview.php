@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Models\Visit;
+use App\Services\VisitorAnalytics;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 
@@ -10,56 +11,47 @@ class VisitsOverview extends StatsOverviewWidget
 {
     protected function getStats(): array
     {
+        $counts = app(VisitorAnalytics::class)->summary();
+
         return [
 
             Stat::make(
                 'Vizite astăzi',
-                Visit::whereDate('created_at', today())->count()
+                $counts['today']
             )
-                ->description('Vizite înregistrate astăzi')
+                ->description('IP-uri unice astăzi · București')
                 ->descriptionIcon('heroicon-o-eye')
                 ->color('info'),
 
             Stat::make(
                 'Vizite ieri',
-                Visit::whereDate(
-                    'created_at',
-                    today()->subDay()
-                )->count()
+                $counts['yesterday']
             )
-                ->description('Vizite înregistrate ieri')
+                ->description('IP-uri unice ieri · București')
                 ->descriptionIcon('heroicon-o-calendar')
                 ->color('gray'),
 
             Stat::make(
                 'Ultimele 7 zile',
-                Visit::where(
-                    'created_at',
-                    '>=',
-                    now()->subDays(7)
-                )->count()
+                $counts['seven']
             )
-                ->description('Activitate recentă')
+                ->description('Suma vizitelor unice zilnice')
                 ->descriptionIcon('heroicon-o-chart-bar')
                 ->color('success'),
 
             Stat::make(
                 'Ultimele 30 zile',
-                Visit::where(
-                    'created_at',
-                    '>=',
-                    now()->subDays(30)
-                )->count()
+                $counts['thirty']
             )
-                ->description('Activitate din ultima lună')
+                ->description('Suma vizitelor unice zilnice')
                 ->descriptionIcon('heroicon-o-calendar-days')
                 ->color('warning'),
 
             Stat::make(
                 'Total vizite',
-                Visit::count()
+                $counts['total']
             )
-                ->description('Toate vizitele înregistrate')
+                ->description('IP/zi; istoric vechi exclus: '.Visit::count().' sesiuni')
                 ->descriptionIcon('heroicon-o-globe-alt')
                 ->color('primary'),
 
